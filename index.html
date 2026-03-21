@@ -64,26 +64,24 @@
             return `${Math.round(days / 365)} Jahre`;
         };
 
-        // Erweiterter SM-2 mit Intra-Session Timer
         const calculateSM2 = (quality, card) => {
             let { easeFactor, interval, repetitions } = card;
             let showAfter = 0; 
             let reQueue = false;
             let displayInterval = "";
 
-            if (quality === 0) { // Nochmal -> 1 Minute
+            if (quality === 0) {
                 repetitions = 0;
                 interval = 0; 
                 easeFactor = Math.max(1.3, easeFactor - 0.2);
                 showAfter = Date.now() + 1 * 60000; 
                 reQueue = true;
                 displayInterval = "1 Min";
-            } else if (quality === 1 && interval === 0) { // Schwer (Neue Karte) -> 10 Minuten
+            } else if (quality === 1 && interval === 0) {
                 showAfter = Date.now() + 10 * 60000; 
                 reQueue = true;
                 displayInterval = "10 Min";
             } else {
-                // Tage-Bereich (Nächster Tag oder später)
                 if (repetitions === 0) {
                     if (quality === 1) interval = 1;
                     else if (quality === 2) interval = 1;
@@ -106,7 +104,7 @@
             return { easeFactor, interval, repetitions, nextReview, status: 'learning', showAfter, reQueue, displayInterval };
         };
 
-        function Dashboard({ stats, newCardsLimit, setNewCardsLimit, onStartSession }) {
+        function Dashboard({ stats, newCardsLimit, setNewCardsLimit, shuffleNewCards, setShuffleNewCards, onStartSession }) {
             const todayNames = ["Morgen", "Übermorgen", "In 3 Tagen", "In 4 Tagen", "In 5 Tagen", "In 6 Tagen", "In 7 Tagen"];
             const totalSessionCards = stats.dueCards.length + Math.min(newCardsLimit, stats.newCards.length);
 
@@ -132,17 +130,40 @@
                     </div>
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                         <h2 className="text-xl font-bold mb-4 text-slate-800">Tagesziel festlegen</h2>
-                        <div className="flex flex-col md:flex-row items-center gap-6">
+                        <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
                             <div className="flex-1 w-full">
                                 <label className="block text-sm font-medium text-slate-600 mb-2">Zusätzliche NEUE Karten heute lernen:</label>
                                 <input type="range" min="0" max="50" step="5" value={newCardsLimit} onChange={(e) => setNewCardsLimit(parseInt(e.target.value))} className="w-full accent-indigo-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
                                 <div className="flex justify-between text-xs text-slate-400 mt-2 font-bold">
                                     <span>0</span><span className="text-indigo-600 bg-indigo-50 px-2 py-1 rounded">{newCardsLimit} Karten</span><span>50</span>
                                 </div>
+                                <div className="mt-4 flex items-center gap-2">
+                                    <input type="checkbox" id="shuffleToggle" checked={shuffleNewCards} onChange={(e) => setShuffleNewCards(e.target.checked)} className="w-4 h-4 accent-indigo-600 cursor-pointer rounded" />
+                                    <label htmlFor="shuffleToggle" className="text-sm font-medium text-slate-600 cursor-pointer">Neue Karten querbeet aus dem Deck mischen</label>
+                                </div>
                             </div>
-                            <button onClick={onStartSession} disabled={totalSessionCards === 0} className="w-full md:w-auto px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                            <button onClick={onStartSession} disabled={totalSessionCards === 0} className="w-full md:w-auto mt-4 md:mt-0 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                                 <Icon name="Play" className="w-5 h-5"/> Lerneinheit starten ({totalSessionCards})
                             </button>
+                        </div>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h2 className="text-xl font-bold mb-4 text-slate-800 flex items-center gap-2">
+                            <Icon name="Calendar" className="text-indigo-500"/> Vorschau: Nächste 7 Tage
+                        </h2>
+                        <div className="flex flex-col gap-4">
+                            {stats.forecast.map((count, index) => (
+                                <div key={index} className="flex items-center gap-4">
+                                    <div className="w-28 text-sm font-medium text-slate-500 text-right">{todayNames[index]}</div>
+                                    <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden flex items-center">
+                                        <div 
+                                            className="bg-sky-400 h-full rounded-full transition-all duration-500" 
+                                            style={{ width: `${Math.min(100, (count / Math.max(20, ...stats.forecast)) * 100)}%` }}
+                                        ></div>
+                                    </div>
+                                    <div className="w-12 text-sm font-bold text-slate-700">{count}</div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -155,7 +176,6 @@
             const [inputs, setInputs] = useState({ genitiv: '', genus: '', deklination: '', bedeutung: '' });
             const [now, setNow] = useState(Date.now());
 
-            // Live-Timer aktualisiert die Zeit jede Sekunde
             useEffect(() => {
                 const timer = setInterval(() => setNow(Date.now()), 1000);
                 return () => clearInterval(timer);
@@ -174,11 +194,9 @@
                 );
             }
 
-            // Suche die erste Karte, deren Sperr-Zeitraum (showAfter) abgelaufen ist
             const readyIndex = queue.findIndex(c => !c.showAfter || c.showAfter <= now);
 
             if (readyIndex === -1) {
-                // Keine Karte bereit -> Zeige Wartebildschirm mit Countdowns
                 const sortedQueue = [...queue].sort((a, b) => a.showAfter - b.showAfter);
                 return (
                     <div className="max-w-md mx-auto py-10 text-center space-y-6 animate-fade-in">
@@ -220,16 +238,13 @@
 
             const handleRate = (quality) => {
                 const result = calculateSM2(quality, card);
-                
-                // Deck in der Datenbank aktualisieren
                 setDeck(prevDeck => prevDeck.map(c => c.id === card.id ? { ...c, ...result } : c));
                 
-                // Warteschlange aktualisieren
                 const newQueue = [...queue];
                 newQueue.splice(readyIndex, 1); 
                 
                 if (result.reQueue) {
-                    newQueue.push({ ...card, ...result }); // Wenn < 1 Tag, wieder hinten anstellen mit Timer
+                    newQueue.push({ ...card, ...result });
                 }
                 
                 setQueue(newQueue);
@@ -480,14 +495,17 @@
             const [deck, setDeck] = useState([]);
             const [view, setView] = useState('dashboard');
             const [newCardsLimit, setNewCardsLimit] = useState(10);
+            const [shuffleNewCards, setShuffleNewCards] = useState(false);
             const [sessionQueue, setSessionQueue] = useState([]);
             const [isLoaded, setIsLoaded] = useState(false);
 
             useEffect(() => {
                 const savedDeck = localStorage.getItem('anki_latin_deck_v4');
                 const savedLimit = localStorage.getItem('anki_new_limit_v4');
+                const savedShuffle = localStorage.getItem('anki_shuffle_new');
                 if (savedDeck) setDeck(JSON.parse(savedDeck));
                 if (savedLimit) setNewCardsLimit(parseInt(savedLimit, 10));
+                if (savedShuffle !== null) setShuffleNewCards(savedShuffle === 'true');
                 setIsLoaded(true);
             }, []);
 
@@ -495,8 +513,9 @@
                 if (isLoaded) {
                     localStorage.setItem('anki_latin_deck_v4', JSON.stringify(deck));
                     localStorage.setItem('anki_new_limit_v4', newCardsLimit.toString());
+                    localStorage.setItem('anki_shuffle_new', shuffleNewCards.toString());
                 }
-            }, [deck, newCardsLimit, isLoaded]);
+            }, [deck, newCardsLimit, shuffleNewCards, isLoaded]);
 
             const stats = useMemo(() => {
                 const now = Date.now();
@@ -519,11 +538,26 @@
             }, [deck]);
 
             const startSession = () => {
-                const sessionCards = [...stats.dueCards, ...stats.newCards.slice(0, newCardsLimit)];
+                let selectedNew = [];
+                if (shuffleNewCards) {
+                    let shuffled = [...stats.newCards];
+                    for (let i = shuffled.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                    }
+                    selectedNew = shuffled.slice(0, newCardsLimit);
+                } else {
+                    selectedNew = stats.newCards.slice(0, newCardsLimit);
+                }
+
+                const sessionCards = [...stats.dueCards, ...selectedNew];
+                
+                // Mische die finale Session (Fällige + Neue)
                 for (let i = sessionCards.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
                     [sessionCards[i], sessionCards[j]] = [sessionCards[j], sessionCards[i]];
                 }
+                
                 setSessionQueue(sessionCards);
                 setView('study');
             };
@@ -552,7 +586,7 @@
                     </nav>
 
                     <main className="max-w-4xl mx-auto p-4 py-8">
-                        {view === 'dashboard' && <Dashboard stats={stats} newCardsLimit={newCardsLimit} setNewCardsLimit={setNewCardsLimit} onStartSession={startSession} />}
+                        {view === 'dashboard' && <Dashboard stats={stats} newCardsLimit={newCardsLimit} setNewCardsLimit={setNewCardsLimit} shuffleNewCards={shuffleNewCards} setShuffleNewCards={setShuffleNewCards} onStartSession={startSession} />}
                         {view === 'study' && <StudySession sessionQueue={sessionQueue} setDeck={setDeck} onFinish={() => setView('dashboard')} />}
                         {view === 'manage' && <CardManager deck={deck} setDeck={setDeck} />}
                     </main>
