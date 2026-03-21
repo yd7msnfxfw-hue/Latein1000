@@ -5,25 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Vocabula Pro - Latein SRS</title>
     
-    <!-- React & ReactDOM -->
+    <!-- React & ReactDOM (Keine Icons mehr, um Abstürze zu vermeiden!) -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     
-    <!-- Babel für JSX im Browser -->
+    <!-- Babel für JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://unpkg.com/lucide-react@latest"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
         .font-serif { font-family: 'Lora', serif; }
-        /* Verhindert Pull-to-refresh auf mobilen Geräten wenn man scrollt */
         html, body { overscroll-behavior-y: contain; }
     </style>
 </head>
@@ -32,10 +27,27 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
-        const { 
-            BookOpen, Database, Play, Plus, Trash2, Check, X, 
-            Search, ChevronRight, AlertCircle, BarChart2, Tag, FileText 
-        } = window.lucideReact;
+
+        // --- EINGEBAUTE ICONS (Verhindert den weißen Bildschirm Bug!) ---
+        const iconPaths = {
+            BookOpen: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+            Database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+            Play: '<polygon points="5 3 19 12 5 21 5 3"/>',
+            Plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+            Trash2: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
+            Check: '<polyline points="20 6 9 17 4 12"/>',
+            X: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+            Search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+            ChevronRight: '<polyline points="9 18 15 12 9 6"/>',
+            AlertCircle: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+            BarChart2: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+            Tag: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+            FileText: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>'
+        };
+
+        const Icon = ({ name, className = "w-5 h-5" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{ __html: iconPaths[name] }} />
+        );
 
         // --- HILFSFUNKTIONEN ---
         const generateId = () => {
@@ -86,13 +98,13 @@
         };
 
         // --- KOMPONENTEN ---
-        function NavButton({ icon, label, active, onClick, badge }) {
+        function NavButton({ iconName, label, active, onClick, badge }) {
             return (
                 <button 
                 onClick={onClick}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${active ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
                 >
-                {icon}
+                <Icon name={iconName} className="w-4 h-4" />
                 <span>{label}</span>
                 {badge !== undefined && badge > 0 && (
                     <span className="ml-2 bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{badge}</span>
@@ -101,10 +113,10 @@
             );
         }
 
-        function MobileNavButton({ icon, label, active, onClick, badge }) {
+        function MobileNavButton({ iconName, label, active, onClick, badge }) {
             return (
                 <button onClick={onClick} className={`flex flex-col items-center p-2 relative ${active ? 'text-indigo-600' : 'text-slate-500'}`}>
-                {icon}
+                <Icon name={iconName} className="w-5 h-5" />
                 <span className="text-xs mt-1 font-medium">{label}</span>
                 {badge !== undefined && badge > 0 && (
                     <span className="absolute top-0 right-2 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badge}</span>
@@ -124,7 +136,7 @@
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center text-center">
                     <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-4">
-                        <Database className="w-6 h-6" />
+                        <Icon name="Database" className="w-6 h-6" />
                     </div>
                     <h3 className="text-slate-500 text-sm font-medium uppercase tracking-wider">Gesamtkarten</h3>
                     <p className="text-3xl font-bold text-slate-800 mt-1">{cards.length}</p>
@@ -132,7 +144,7 @@
 
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-rose-200 flex flex-col items-center text-center ring-1 ring-rose-50">
                     <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-4">
-                        <AlertCircle className="w-6 h-6" />
+                        <Icon name="AlertCircle" className="w-6 h-6" />
                     </div>
                     <h3 className="text-rose-600 text-sm font-medium uppercase tracking-wider">Heute Fällig</h3>
                     <p className="text-3xl font-bold text-rose-600 mt-1">{dueCards.length}</p>
@@ -140,7 +152,7 @@
 
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center text-center">
                     <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
-                        <Check className="w-6 h-6" />
+                        <Icon name="Check" className="w-6 h-6" />
                     </div>
                     <h3 className="text-slate-500 text-sm font-medium uppercase tracking-wider">Gelernt</h3>
                     <p className="text-3xl font-bold text-slate-800 mt-1">
@@ -155,7 +167,7 @@
                     disabled={dueCards.length === 0}
                     className={`flex items-center space-x-3 px-8 py-4 rounded-full text-lg font-bold transition-all transform hover:scale-105 ${dueCards.length > 0 ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg hover:shadow-indigo-500/30' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
                     >
-                    <Play className="w-6 h-6 fill-current" />
+                    <Icon name="Play" className="w-6 h-6" />
                     <span>{dueCards.length > 0 ? 'Lernsitzung starten' : 'Alles erledigt für heute!'}</span>
                     </button>
                 </div>
@@ -167,7 +179,7 @@
             if (isCorrect) {
                 return (
                 <div className="flex items-center space-x-3 w-full px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg font-medium">
-                    <Check className="w-5 h-5 flex-shrink-0" />
+                    <Icon name="Check" className="w-5 h-5 flex-shrink-0" />
                     <span>{target || input}</span>
                 </div>
                 );
@@ -176,14 +188,14 @@
             return (
                 <div className="w-full px-4 py-3 bg-rose-50 border border-rose-200 rounded-lg">
                 <div className="flex items-center space-x-3 text-rose-700 font-medium mb-1">
-                    <X className="w-5 h-5 flex-shrink-0" />
+                    <Icon name="X" className="w-5 h-5 flex-shrink-0" />
                     <span className="line-through opacity-70">{input || "(Keine Eingabe)"}</span>
                 </div>
                 <div className="flex items-center space-x-3 text-emerald-700 font-bold pl-8">
                     <span>{target}</span>
                 </div>
                 {allowFuzzy && (
-                    <p className="text-xs text-rose-500 mt-2 pl-8">Du entscheidest, ob deine Synonym-Eingabe trotzdem "Gut" war.</p>
+                    <p className="text-xs text-rose-500 mt-2 pl-8">Du entscheidest, ob deine Eingabe trotzdem richtig war.</p>
                 )}
                 </div>
             );
@@ -214,7 +226,7 @@
                 return (
                 <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
                     <div className="w-20 h-20 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center">
-                    <Check className="w-10 h-10" />
+                    <Icon name="Check" className="w-10 h-10" />
                     </div>
                     <h2 className="text-3xl font-serif font-bold text-slate-800">Sitzung abgeschlossen!</h2>
                     <p className="text-slate-600">Du hast alle fälligen Karten für heute gemeistert.</p>
@@ -252,14 +264,14 @@
                 <div className="max-w-2xl mx-auto">
                 <div className="flex justify-between items-center mb-6 text-sm font-medium text-slate-500">
                     <span>Karte {currentIndex + 1} von {dueCards.length}</span>
-                    <span className="flex items-center space-x-1"><BarChart2 className="w-4 h-4"/> <span>EF: {card.easeFactor.toFixed(1)}</span></span>
+                    <span className="flex items-center space-x-1"><Icon name="BarChart2" className="w-4 h-4"/> <span>EF: {card.easeFactor.toFixed(1)}</span></span>
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
                     <div className="bg-slate-50 text-center py-12 px-6 border-b border-slate-200 relative">
                     {card.tags && (
                         <div className="absolute top-4 right-4 bg-indigo-100 text-indigo-800 text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1 shadow-sm">
-                        <Tag className="w-3 h-3" />
+                        <Icon name="Tag" className="w-3 h-3" />
                         <span>{card.tags}</span>
                         </div>
                     )}
@@ -278,7 +290,7 @@
                             value={inputs.genitiv} 
                             onChange={e => setInputs({...inputs, genitiv: e.target.value})}
                             className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                            placeholder="z.B. fibrae (leer lassen falls unbekannt)"
+                            placeholder="z.B. fibrae (oder leer lassen)"
                             />
                         ) : (
                             <DiffResult input={inputs.genitiv} target={card.genitiv} isCorrect={isGenitivCorrect} />
@@ -344,7 +356,7 @@
                     {!isFlipped ? (
                         <button type="submit" className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition-colors flex justify-center items-center space-x-2">
                         <span>Prüfen</span>
-                        <ChevronRight className="w-5 h-5" />
+                        <Icon name="ChevronRight" className="w-5 h-5" />
                         </button>
                     ) : (
                         <div className="pt-4 border-t border-slate-100">
@@ -441,7 +453,7 @@
                 <div className="space-y-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <div className="relative flex-1">
-                    <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                    <Icon name="Search" className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
                     <input 
                         type="text" 
                         placeholder="Vokabeln oder Tags suchen..." 
@@ -456,14 +468,14 @@
                         onClick={() => { setIsAdding(!isAdding); setShowImportArea(false); }} 
                         className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${isAdding ? 'bg-slate-200 text-slate-800' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
                     >
-                        <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Neu</span>
+                        <Icon name="Plus" className="w-4 h-4" /> <span className="hidden sm:inline">Neu</span>
                     </button>
                     
                     <button 
                         onClick={() => { setShowImportArea(!showImportArea); setIsAdding(false); }} 
                         className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${showImportArea ? 'bg-slate-200 text-slate-800' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
                     >
-                        <FileText className="w-4 h-4" /> <span>Text Import</span>
+                        <Icon name="FileText" className="w-4 h-4" /> <span>Text Import</span>
                     </button>
                     </div>
                 </div>
@@ -563,7 +575,7 @@
                         {filteredCards.length === 0 ? (
                             <tr>
                             <td colSpan="7" className="px-4 py-12 text-center">
-                                <FileText className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                                <Icon name="FileText" className="w-8 h-8 mx-auto text-slate-300 mb-2" />
                                 <p className="text-slate-500 font-medium">Noch keine Karten vorhanden.</p>
                                 <button onClick={() => setShowImportArea(true)} className="mt-2 text-indigo-600 hover:text-indigo-700 font-bold text-sm">Nutze den Text Import!</button>
                             </td>
@@ -594,7 +606,7 @@
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                 <button onClick={() => handleDelete(card.id)} className="text-slate-400 hover:text-rose-500 transition-colors">
-                                    <Trash2 className="w-5 h-5 inline" />
+                                    <Icon name="Trash2" className="w-5 h-5 inline" />
                                 </button>
                                 </td>
                             </tr>
@@ -642,22 +654,22 @@
                     <div className="max-w-4xl mx-auto px-4">
                     <div className="flex justify-between items-center h-16">
                         <div className="flex items-center space-x-2 font-serif text-xl font-bold tracking-wide">
-                        <BookOpen className="w-6 h-6 text-indigo-400" />
+                        <Icon name="BookOpen" className="w-6 h-6 text-indigo-400" />
                         <span>Vocabula <span className="text-indigo-400">Pro</span></span>
                         </div>
                         <div className="hidden md:flex space-x-1">
-                        <NavButton icon={<BarChart2 className="w-4 h-4" />} label="Dashboard" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
-                        <NavButton icon={<Play className="w-4 h-4" />} label="Lernen" active={currentView === 'study'} onClick={() => setCurrentView('study')} badge={dueCards.length} />
-                        <NavButton icon={<Database className="w-4 h-4" />} label="Manager" active={currentView === 'manager'} onClick={() => setCurrentView('manager')} />
+                        <NavButton iconName="BarChart2" label="Dashboard" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
+                        <NavButton iconName="Play" label="Lernen" active={currentView === 'study'} onClick={() => setCurrentView('study')} badge={dueCards.length} />
+                        <NavButton iconName="Database" label="Manager" active={currentView === 'manager'} onClick={() => setCurrentView('manager')} />
                         </div>
                     </div>
                     </div>
                 </nav>
 
-                <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-2 z-50">
-                    <MobileNavButton icon={<BarChart2 />} label="Home" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
-                    <MobileNavButton icon={<Play />} label="Lernen" active={currentView === 'study'} onClick={() => setCurrentView('study')} badge={dueCards.length} />
-                    <MobileNavButton icon={<Database />} label="Manager" active={currentView === 'manager'} onClick={() => setCurrentView('manager')} />
+                <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-2 z-50 shadow-[0_-5px_15px_-10px_rgba(0,0,0,0.1)]">
+                    <MobileNavButton iconName="BarChart2" label="Home" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
+                    <MobileNavButton iconName="Play" label="Lernen" active={currentView === 'study'} onClick={() => setCurrentView('study')} badge={dueCards.length} />
+                    <MobileNavButton iconName="Database" label="Manager" active={currentView === 'manager'} onClick={() => setCurrentView('manager')} />
                 </div>
 
                 <main className="max-w-4xl mx-auto p-4 py-8">
