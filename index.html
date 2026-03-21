@@ -20,6 +20,10 @@
         body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
         .font-serif { font-family: 'Lora', serif; }
         html, body { overscroll-behavior-y: contain; }
+        
+        /* Eigene Animationen */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800">
@@ -33,16 +37,10 @@
             BookOpen: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
             Database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
             Play: '<polygon points="5 3 19 12 5 21 5 3"/>',
-            Plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
             Trash2: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
             Check: '<polyline points="20 6 9 17 4 12"/>',
             X: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
-            Search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
-            ChevronRight: '<polyline points="9 18 15 12 9 6"/>',
-            AlertCircle: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
             BarChart2: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
-            Tag: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
-            FileText: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
             Calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
             Upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
             List: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>'
@@ -67,6 +65,7 @@
             return '';
         };
 
+        // SM-2 Algorithmus Logik (aus App 1, super stabil)
         const calculateSM2 = (quality, card) => {
             let { easeFactor, interval, repetitions } = card;
             if (quality === 0) {
@@ -99,31 +98,12 @@
             return `${Math.round(days / 365)} Jahre`;
         };
 
-        const parseCSV = (text) => {
-            const lines = text.split('\n').filter(l => l.trim() !== '');
-            if (lines.length < 2) return [];
-            const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
-            const parsedCards = [];
-            for (let i = 1; i < lines.length; i++) {
-                const values = lines[i].split(',').map(v => v.trim());
-                const cardData = {};
-                headers.forEach((h, index) => { cardData[h] = values[index] || ''; });
-                if (cardData.nominativ) {
-                    parsedCards.push({
-                        id: generateId(),
-                        nominativ: cardData.nominativ, genitiv: cardData.genitiv || '', genus: cardData.genus || 'n',
-                        deklination: cardData.deklination || autoDetectDeklination(cardData.nominativ, cardData.genitiv),
-                        bedeutung: cardData.bedeutung || '', tags: cardData.tags || 'CSV Import',
-                        status: 'new', interval: 0, easeFactor: 2.5, repetitions: 0, nextReview: 0,
-                    });
-                }
-            }
-            return parsedCards;
-        };
-
         // --- KOMPONENTEN ---
+        
+        // 1. Dashboard
         function Dashboard({ stats, newCardsLimit, setNewCardsLimit, onStartSession }) {
             const todayNames = ["Morgen", "Übermorgen", "In 3 Tagen", "In 4 Tagen", "In 5 Tagen", "In 6 Tagen", "In 7 Tagen"];
+            const totalSessionCards = stats.dueCards.length + Math.min(newCardsLimit, stats.newCards.length);
 
             return (
                 <div className="space-y-8 animate-fade-in">
@@ -135,15 +115,15 @@
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
                             <span className="text-4xl font-black text-rose-500">{stats.dueCards.length}</span>
-                            <span className="text-slate-500 font-medium mt-2 uppercase tracking-wider text-sm">Heute Fällig</span>
+                            <span className="text-slate-500 font-medium mt-2 uppercase tracking-wider text-xs">Heute Fällig</span>
                         </div>
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
                             <span className="text-4xl font-black text-sky-500">{stats.newCards.length}</span>
-                            <span className="text-slate-500 font-medium mt-2 uppercase tracking-wider text-sm">Neue Verfügbar</span>
+                            <span className="text-slate-500 font-medium mt-2 uppercase tracking-wider text-xs">Neue Verfügbar</span>
                         </div>
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
                             <span className="text-4xl font-black text-emerald-500">{stats.learningCards.length}</span>
-                            <span className="text-slate-500 font-medium mt-2 uppercase tracking-wider text-sm">Im Lernzyklus</span>
+                            <span className="text-slate-500 font-medium mt-2 uppercase tracking-wider text-xs">Im Lernzyklus</span>
                         </div>
                     </div>
 
@@ -164,11 +144,11 @@
                             </div>
                             <button 
                                 onClick={onStartSession}
-                                disabled={stats.dueCards.length === 0 && (newCardsLimit === 0 || stats.newCards.length === 0)}
+                                disabled={totalSessionCards === 0}
                                 className="w-full md:w-auto px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
                                 <Icon name="Play" className="w-5 h-5"/>
-                                Lerneinheit starten ({stats.dueCards.length + Math.min(newCardsLimit, stats.newCards.length)})
+                                Lerneinheit starten ({totalSessionCards})
                             </button>
                         </div>
                     </div>
@@ -196,14 +176,15 @@
             );
         }
 
-        function StudySession({ sessionQueue, setDeck, onFinish }) {
+        // 2. Study Session (Lernmodus) - Mit gefixtem Queue-State!
+        function StudySession({ sessionQueue, setSessionQueue, setDeck, onFinish }) {
             const [currentIndex, setCurrentIndex] = useState(0);
             const [showAnswer, setShowAnswer] = useState(false);
             const [inputs, setInputs] = useState({ genitiv: '', genus: '', deklination: '', bedeutung: '' });
 
             if (currentIndex >= sessionQueue.length) {
                 return (
-                    <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
+                    <div className="flex flex-col items-center justify-center py-20 text-center space-y-6 animate-fade-in">
                         <div className="w-20 h-20 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center">
                             <Icon name="Check" className="w-10 h-10" />
                         </div>
@@ -215,6 +196,8 @@
             }
 
             const card = sessionQueue[currentIndex];
+            
+            // Vorschau-Berechnung für die Buttons
             const simAgain = calculateSM2(0, card);
             const simHard = calculateSM2(1, card);
             const simGood = calculateSM2(2, card);
@@ -224,12 +207,16 @@
 
             const handleRate = (quality) => {
                 const updatedStats = calculateSM2(quality, card);
-                setDeck(prev => prev.map(c => c.id === card.id ? { ...c, ...updatedStats } : c));
                 
+                // Deck updaten
+                setDeck(prevDeck => prevDeck.map(c => c.id === card.id ? { ...c, ...updatedStats } : c));
+                
+                // WICHTIGER FIX: Bei Fehlern die Karte hinten anstellen (Sauberer React State Update)
                 if (quality === 0) {
-                    sessionQueue.push({ ...card, ...updatedStats });
+                    setSessionQueue(prevQueue => [...prevQueue, { ...card, ...updatedStats }]);
                 }
                 
+                // Zurücksetzen für nächste Karte
                 setInputs({ genitiv: '', genus: '', deklination: '', bedeutung: '' });
                 setShowAnswer(false);
                 setCurrentIndex(prev => prev + 1);
@@ -238,9 +225,9 @@
             const checkMatch = (input, target) => input?.trim().toLowerCase() === target?.trim().toLowerCase();
 
             return (
-                <div className="max-w-2xl mx-auto w-full flex-1 flex flex-col">
+                <div className="max-w-2xl mx-auto w-full flex-1 flex flex-col animate-fade-in">
                     <header className="flex justify-between items-center mb-6 w-full">
-                        <div className="text-slate-500 text-sm font-bold bg-white px-3 py-1 rounded-full border border-slate-200">
+                        <div className="text-slate-500 text-sm font-bold bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm">
                             Karte {currentIndex + 1} von {sessionQueue.length}
                         </div>
                         <button onClick={onFinish} className="text-slate-400 hover:text-slate-600 font-medium flex items-center gap-1 transition-colors">
@@ -255,6 +242,7 @@
                     </div>
 
                     <form onSubmit={handleCheck} className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 mb-6 space-y-5">
+                        {/* Genitiv */}
                         <div>
                             <label className="block text-sm font-bold text-slate-600 mb-2">Genitiv</label>
                             <div className="relative">
@@ -264,11 +252,12 @@
                                     placeholder="z.B. fibrae"
                                 />
                                 {showAnswer && !checkMatch(inputs.genitiv, card.genitiv) && (
-                                    <div className="absolute right-3 top-3 text-emerald-600 font-bold text-sm">Lösung: {card.genitiv}</div>
+                                    <div className="absolute right-3 top-3 text-emerald-600 font-bold text-sm bg-emerald-50 px-2 py-1 rounded">Lösung: {card.genitiv}</div>
                                 )}
                             </div>
                         </div>
 
+                        {/* Genus & Deklination */}
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-bold text-slate-600 mb-2">Genus</label>
@@ -301,6 +290,7 @@
                             </div>
                         </div>
 
+                        {/* Bedeutung */}
                         <div>
                             <label className="block text-sm font-bold text-slate-600 mb-2">Bedeutung</label>
                             <div className="relative">
@@ -321,6 +311,7 @@
                             </div>
                         </div>
 
+                        {/* Buttons (Prüfen vs. SM-2 Rating) */}
                         {!showAnswer ? (
                             <button type="submit" className="w-full mt-4 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-lg rounded-xl shadow-md transition-all">
                                 Prüfen
@@ -350,8 +341,9 @@
             );
         }
 
+        // 3. Karten Verwalten (Aus App 2, da sehr gut)
         function CardManager({ deck, setDeck }) {
-            const [importMode, setImportMode] = useState('text'); // 'text' oder 'file'
+            const [importMode, setImportMode] = useState('text');
             const [importText, setImportText] = useState('');
 
             const handleFileUpload = (e) => {
@@ -359,9 +351,27 @@
                 if (!file) return;
                 const reader = new FileReader();
                 reader.onload = (event) => {
-                    const newCards = parseCSV(event.target.result);
-                    setDeck(prev => [...prev, ...newCards]);
-                    alert(`${newCards.length} Karten erfolgreich aus CSV importiert!`);
+                    const text = event.target.result;
+                    const lines = text.split('\n').filter(l => l.trim() !== '');
+                    if (lines.length < 2) return;
+                    const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+                    const parsedCards = [];
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].split(',').map(v => v.trim());
+                        const cardData = {};
+                        headers.forEach((h, index) => { cardData[h] = values[index] || ''; });
+                        if (cardData.nominativ) {
+                            parsedCards.push({
+                                id: generateId(),
+                                nominativ: cardData.nominativ, genitiv: cardData.genitiv || '', genus: cardData.genus || 'n',
+                                deklination: cardData.deklination || autoDetectDeklination(cardData.nominativ, cardData.genitiv),
+                                bedeutung: cardData.bedeutung || '',
+                                status: 'new', interval: 0, easeFactor: 2.5, repetitions: 0, nextReview: 0,
+                            });
+                        }
+                    }
+                    setDeck(prev => [...prev, ...parsedCards]);
+                    alert(`${parsedCards.length} Karten erfolgreich importiert!`);
                 };
                 reader.readAsText(file);
             };
@@ -375,10 +385,10 @@
                     if(!line.trim()) return;
                     const separator = line.includes(';') ? ';' : ',';
                     const cols = line.split(separator).map(s => s.trim());
-                    if (index === 0 && cols[0].toLowerCase() === 'nominativ') return; // Header überspringen
+                    if (index === 0 && cols[0].toLowerCase() === 'nominativ') return;
 
-                    let nom, gen, genusRaw, deklRaw, bed, tagsRaw = '';
-                    if (cols.length >= 5) [nom, gen, genusRaw, deklRaw, bed, tagsRaw] = cols;
+                    let nom, gen, genusRaw, deklRaw, bed = '';
+                    if (cols.length >= 5) [nom, gen, genusRaw, deklRaw, bed] = cols;
                     else if (cols.length === 4) { [nom, gen, genusRaw, bed] = cols; deklRaw = ''; } 
                     else return;
 
@@ -388,8 +398,7 @@
                         importedCards.push({
                             id: generateId(), nominativ: nom, genitiv: gen, genus: genus,
                             deklination: deklRaw || autoDetectDeklination(nom, gen),
-                            bedeutung: bed, tags: tagsRaw || 'Text Import',
-                            status: 'new', interval: 0, easeFactor: 2.5, repetitions: 0, nextReview: 0
+                            bedeutung: bed, status: 'new', interval: 0, easeFactor: 2.5, repetitions: 0, nextReview: 0
                         });
                     }
                 });
@@ -404,7 +413,7 @@
             };
 
             return (
-                <div className="space-y-6">
+                <div className="space-y-6 animate-fade-in">
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-bold flex items-center gap-2"><Icon name="Database"/> Vokabeln Importieren</h2>
@@ -416,10 +425,10 @@
 
                         {importMode === 'text' ? (
                             <div className="animate-fade-in">
-                                <p className="text-sm text-slate-500 mb-3">Format: <code className="bg-slate-100 px-2 py-1 rounded text-slate-700">nominativ, genitiv, genus, deklination(optional), bedeutung, tags(optional)</code></p>
+                                <p className="text-sm text-slate-500 mb-3">Format: <code className="bg-slate-100 px-2 py-1 rounded text-slate-700">nominativ, genitiv, genus, deklination(optional), bedeutung</code></p>
                                 <textarea
                                     className="w-full h-32 p-4 text-sm font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-y mb-3"
-                                    placeholder="Fibra, fibrae, f, A, die Faser, Anatomie&#10;Musculus, musculi, m, , der Muskel"
+                                    placeholder="Fibra, fibrae, f, A, die Faser&#10;Musculus, musculi, m, , der Muskel"
                                     value={importText} onChange={(e) => setImportText(e.target.value)}
                                 />
                                 <button onClick={processTextImport} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 transition-colors">Importieren</button>
@@ -428,7 +437,7 @@
                             <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50 animate-fade-in">
                                 <Icon name="Upload" className="w-10 h-10 mx-auto text-slate-400 mb-3"/>
                                 <input type="file" accept=".csv" onChange={handleFileUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer mx-auto max-w-xs" />
-                                <p className="text-xs text-slate-400 mt-4">Spalten: nominativ, genitiv, genus, deklination, bedeutung, tags</p>
+                                <p className="text-xs text-slate-400 mt-4">Spalten: nominativ, genitiv, genus, deklination, bedeutung</p>
                             </div>
                         )}
                         
@@ -445,9 +454,10 @@
                                 <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs border-b border-slate-200">
                                     <tr>
                                         <th className="px-4 py-3">Nominativ</th>
-                                        <th className="px-4 py-3">Genitiv (Info)</th>
+                                        <th className="px-4 py-3">Genitiv</th>
                                         <th className="px-4 py-3">Bedeutung</th>
                                         <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3">Nächste</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -462,10 +472,13 @@
                                                     <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold">Lvl {card.repetitions}</span>
                                                 }
                                             </td>
+                                            <td className="px-4 py-3 text-xs text-slate-400">
+                                                {card.interval === 0 ? '-' : formatInterval(card.interval)}
+                                            </td>
                                         </tr>
                                     ))}
                                     {deck.length === 0 && (
-                                        <tr><td colSpan="4" className="px-4 py-8 text-center text-slate-400 font-medium">Noch keine Vokabeln in der Datenbank.</td></tr>
+                                        <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400 font-medium">Noch keine Vokabeln in der Datenbank.</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -484,8 +497,8 @@
             const [isLoaded, setIsLoaded] = useState(false);
 
             useEffect(() => {
-                const savedDeck = localStorage.getItem('anki_latin_deck_v2');
-                const savedLimit = localStorage.getItem('anki_new_limit_v2');
+                const savedDeck = localStorage.getItem('anki_latin_deck_v3');
+                const savedLimit = localStorage.getItem('anki_new_limit_v3');
                 if (savedDeck) setDeck(JSON.parse(savedDeck));
                 if (savedLimit) setNewCardsLimit(parseInt(savedLimit, 10));
                 setIsLoaded(true);
@@ -493,11 +506,12 @@
 
             useEffect(() => {
                 if (isLoaded) {
-                    localStorage.setItem('anki_latin_deck_v2', JSON.stringify(deck));
-                    localStorage.setItem('anki_new_limit_v2', newCardsLimit.toString());
+                    localStorage.setItem('anki_latin_deck_v3', JSON.stringify(deck));
+                    localStorage.setItem('anki_new_limit_v3', newCardsLimit.toString());
                 }
             }, [deck, newCardsLimit, isLoaded]);
 
+            // Stats berechnen (Fällige, Neue, Vorschau)
             const stats = useMemo(() => {
                 const now = Date.now();
                 const dueCards = deck.filter(c => c.status === 'learning' && c.nextReview <= now);
@@ -518,17 +532,21 @@
                 return { dueCards, newCards, learningCards, forecast };
             }, [deck]);
 
+            // Session starten und Queue aufbauen
             const startSession = () => {
                 const sessionCards = [...stats.dueCards, ...stats.newCards.slice(0, newCardsLimit)];
+                
+                // Mischen (Fisher-Yates)
                 for (let i = sessionCards.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
                     [sessionCards[i], sessionCards[j]] = [sessionCards[j], sessionCards[i]];
                 }
+                
                 setSessionQueue(sessionCards);
                 setView('study');
             };
 
-            if (!isLoaded) return <div className="min-h-screen flex items-center justify-center font-bold text-slate-400">Lade...</div>;
+            if (!isLoaded) return <div className="min-h-screen flex items-center justify-center font-bold text-slate-400">Lade Vocabula Pro...</div>;
 
             return (
                 <div className="min-h-screen pb-20 md:pb-0">
@@ -553,10 +571,11 @@
 
                     <main className="max-w-4xl mx-auto p-4 py-8">
                         {view === 'dashboard' && <Dashboard stats={stats} newCardsLimit={newCardsLimit} setNewCardsLimit={setNewCardsLimit} onStartSession={startSession} />}
-                        {view === 'study' && <StudySession sessionQueue={sessionQueue} setDeck={setDeck} onFinish={() => setView('dashboard')} />}
+                        {view === 'study' && <StudySession sessionQueue={sessionQueue} setSessionQueue={setSessionQueue} setDeck={setDeck} onFinish={() => setView('dashboard')} />}
                         {view === 'manage' && <CardManager deck={deck} setDeck={setDeck} />}
                     </main>
 
+                    {/* Mobile Bottom Navigation */}
                     <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-2 z-50 shadow-[0_-5px_15px_-10px_rgba(0,0,0,0.1)]">
                         <button onClick={() => setView('dashboard')} className={`flex flex-col items-center p-2 w-full ${view === 'dashboard' ? 'text-indigo-600' : 'text-slate-400'}`}>
                             <Icon name="BarChart2" className="w-6 h-6" /><span className="text-[10px] font-bold mt-1">Home</span>
