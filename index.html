@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vocabula Pro - Latein SRS</title>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel für JSX im Browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide-react@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .font-serif { font-family: 'Lora', serif; }
+        /* Verhindert Pull-to-refresh auf mobilen Geräten wenn man scrollt */
+        html, body { overscroll-behavior-y: contain; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        const { 
+            BookOpen, Database, Play, Plus, Trash2, Check, X, 
+            Search, ChevronRight, AlertCircle, BarChart2, Tag, FileText 
+        } = window.lucideReact;
+
+        // --- HILFSFUNKTIONEN ---
+        const generateId = () => {
+            return typeof crypto !== 'undefined' && crypto.randomUUID 
+                ? crypto.randomUUID() 
+                : Math.random().toString(36).substring(2, 15);
+        };
+
+        const autoDetectDeklination = (nominativ, genitiv) => {
+            if (!nominativ || !genitiv) return '';
+            const nom = nominativ.trim().toLowerCase();
+            const gen = genitiv.trim().toLowerCase();
+            
+            if (gen.endsWith('ae')) return 'A';
+            if (gen.endsWith('i')) return 'O';
+            if (gen.endsWith('is')) return 'K';
+            if (gen.endsWith('ei')) return 'E';
+            if (gen.endsWith('us') && nom.endsWith('us')) return 'U';
+            
+            return '';
+        };
+
+        const calculateNextReview = (card, quality) => {
+            let { interval, easeFactor, repetitions } = card;
+            
+            if (quality === 0) {
+                repetitions = 0;
+                interval = 1;
+                easeFactor = Math.max(1.3, easeFactor - 0.2);
+            } else {
+                if (repetitions === 0) {
+                    interval = 1;
+                } else if (repetitions === 1) {
+                    interval = 6;
+                } else {
+                    if (quality === 1) interval = Math.max(1, Math.round(interval * 1.2)); 
+                    else if (quality === 2) interval = Math.max(1, Math.round(interval * easeFactor)); 
+                    else if (quality === 3) interval = Math.max(1, Math.round(interval * easeFactor * 1.3)); 
+                }
+                repetitions++;
+                
+                if (quality === 1) easeFactor = Math.max(1.3, easeFactor - 0.15);
+                else if (quality === 3) easeFactor += 0.15;
+            }
+
+            const nextReview = Date.now() + (interval * 24 * 60 * 60 * 1000);
+            return { interval, easeFactor, repetitions, nextReview };
+        };
+
+        // --- KOMPONENTEN ---
+        function NavButton({ icon, label, active, onClick, badge }) {
+            return (
+                <button 
+                onClick={onClick}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${active ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+                >
+                {icon}
+                <span>{label}</span>
+                {badge !== undefined && badge > 0 && (
+                    <span className="ml-2 bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{badge}</span>
+                )}
+                </button>
+            );
+        }
+
+        function MobileNavButton({ icon, label, active, onClick, badge }) {
+            return (
+                <button onClick={onClick} className={`flex flex-col items-center p-2 relative ${active ? 'text-indigo-600' : 'text-slate-500'}`}>
+                {icon}
+                <span className="text-xs mt-1 font-medium">{label}</span>
+                {badge !== undefined && badge > 0 && (
+                    <span className="absolute top-0 right-2 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badge}</span>
+                )}
+                </button>
+            );
+        }
+
+        function Dashboard({ cards, dueCards, onStartStudy }) {
+            return (
+                <div className="space-y-6">
+                <header className="mb-8">
+                    <h1 className="text-3xl font-serif font-bold text-slate-900 mb-2">Salve, Studiosus!</h1>
+                    <p className="text-slate-600">Dein täglicher Überblick über deinen Lernfortschritt.</p>
+                </header>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-4">
+                        <Database className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-slate-500 text-sm font-medium uppercase tracking-wider">Gesamtkarten</h3>
+                    <p className="text-3xl font-bold text-slate-800 mt-1">{cards.length}</p>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-rose-200 flex flex-col items-center text-center ring-1 ring-rose-50">
+                    <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                        <AlertCircle className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-rose-600 text-sm font-medium uppercase tracking-wider">Heute Fällig</h3>
+                    <p className="text-3xl font-bold text-rose-600 mt-1">{dueCards.length}</p>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
+                        <Check className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-slate-500 text-sm font-medium uppercase tracking-wider">Gelernt</h3>
+                    <p className="text-3xl font-bold text-slate-800 mt-1">
+                        {cards.filter(c => c.repetitions > 0).length}
+                    </p>
+                    </div>
+                </div>
+
+                <div className="mt-8 flex justify-center">
+                    <button 
+                    onClick={onStartStudy}
+                    disabled={dueCards.length === 0}
+                    className={`flex items-center space-x-3 px-8 py-4 rounded-full text-lg font-bold transition-all transform hover:scale-105 ${dueCards.length > 0 ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg hover:shadow-indigo-500/30' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                    >
+                    <Play className="w-6 h-6 fill-current" />
+                    <span>{dueCards.length > 0 ? 'Lernsitzung starten' : 'Alles erledigt für heute!'}</span>
+                    </button>
+                </div>
+                </div>
+            );
+        }
+
+        function DiffResult({ input, target, isCorrect, allowFuzzy }) {
+            if (isCorrect) {
+                return (
+                <div className="flex items-center space-x-3 w-full px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg font-medium">
+                    <Check className="w-5 h-5 flex-shrink-0" />
+                    <span>{target || input}</span>
+                </div>
+                );
+            }
+
+            return (
+                <div className="w-full px-4 py-3 bg-rose-50 border border-rose-200 rounded-lg">
+                <div className="flex items-center space-x-3 text-rose-700 font-medium mb-1">
+                    <X className="w-5 h-5 flex-shrink-0" />
+                    <span className="line-through opacity-70">{input || "(Keine Eingabe)"}</span>
+                </div>
+                <div className="flex items-center space-x-3 text-emerald-700 font-bold pl-8">
+                    <span>{target}</span>
+                </div>
+                {allowFuzzy && (
+                    <p className="text-xs text-rose-500 mt-2 pl-8">Du entscheidest, ob deine Synonym-Eingabe trotzdem "Gut" war.</p>
+                )}
+                </div>
+            );
+        }
+
+        function RateButton({ label, sub, color, onClick }) {
+            const colorClasses = {
+                rose: 'bg-rose-100 text-rose-700 hover:bg-rose-200 border-rose-200',
+                orange: 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200',
+                indigo: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-indigo-200',
+                emerald: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200',
+            };
+
+            return (
+                <button onClick={onClick} type="button" className={`flex flex-col items-center justify-center py-3 px-2 rounded-xl border transition-colors ${colorClasses[color]}`}>
+                <span className="font-bold text-sm md:text-base">{label}</span>
+                <span className="text-[10px] md:text-xs opacity-80 mt-1">{sub}</span>
+                </button>
+            );
+        }
+
+        function StudySession({ dueCards, setCards, onFinish }) {
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [isFlipped, setIsFlipped] = useState(false);
+            const [inputs, setInputs] = useState({ genitiv: '', genus: '', deklination: '', bedeutung: '' });
+
+            if (currentIndex >= dueCards.length) {
+                return (
+                <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
+                    <div className="w-20 h-20 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center">
+                    <Check className="w-10 h-10" />
+                    </div>
+                    <h2 className="text-3xl font-serif font-bold text-slate-800">Sitzung abgeschlossen!</h2>
+                    <p className="text-slate-600">Du hast alle fälligen Karten für heute gemeistert.</p>
+                    <button onClick={onFinish} className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-medium">Zurück zum Dashboard</button>
+                </div>
+                );
+            }
+
+            const card = dueCards[currentIndex];
+
+            const handlePruefen = (e) => {
+                e.preventDefault();
+                setIsFlipped(true);
+            };
+
+            const handleRating = (quality) => {
+                const updatedStatus = calculateNextReview(card, quality);
+                setCards(prevCards => prevCards.map(c => c.id === card.id ? { ...c, ...updatedStatus } : c));
+                setInputs({ genitiv: '', genus: '', deklination: '', bedeutung: '' });
+                setIsFlipped(false);
+                setCurrentIndex(prev => prev + 1);
+            };
+
+            const checkField = (input, target) => {
+                if (!input) return false;
+                return input.trim().toLowerCase() === target.trim().toLowerCase();
+            };
+
+            const isGenitivCorrect = checkField(inputs.genitiv, card.genitiv);
+            const isGenusCorrect = inputs.genus === card.genus;
+            const isDeklinationCorrect = inputs.deklination === card.deklination;
+            const isBedeutungCorrect = checkField(inputs.bedeutung, card.bedeutung);
+
+            return (
+                <div className="max-w-2xl mx-auto">
+                <div className="flex justify-between items-center mb-6 text-sm font-medium text-slate-500">
+                    <span>Karte {currentIndex + 1} von {dueCards.length}</span>
+                    <span className="flex items-center space-x-1"><BarChart2 className="w-4 h-4"/> <span>EF: {card.easeFactor.toFixed(1)}</span></span>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+                    <div className="bg-slate-50 text-center py-12 px-6 border-b border-slate-200 relative">
+                    {card.tags && (
+                        <div className="absolute top-4 right-4 bg-indigo-100 text-indigo-800 text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1 shadow-sm">
+                        <Tag className="w-3 h-3" />
+                        <span>{card.tags}</span>
+                        </div>
+                    )}
+                    <h2 className="text-4xl md:text-5xl font-serif font-bold text-slate-900">{card.nominativ}</h2>
+                    </div>
+
+                    <form onSubmit={handlePruefen} className="p-6 md:p-8 space-y-6">
+                    <div className="space-y-4">
+                        
+                        <div>
+                        <label className="block text-sm font-semibold text-slate-600 mb-1">Genitiv</label>
+                        {!isFlipped ? (
+                            <input 
+                            autoFocus
+                            type="text" 
+                            value={inputs.genitiv} 
+                            onChange={e => setInputs({...inputs, genitiv: e.target.value})}
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                            placeholder="z.B. fibrae (leer lassen falls unbekannt)"
+                            />
+                        ) : (
+                            <DiffResult input={inputs.genitiv} target={card.genitiv} isCorrect={isGenitivCorrect} />
+                        )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-600 mb-1">Genus</label>
+                            {!isFlipped ? (
+                            <div className="flex rounded-lg overflow-hidden border border-slate-300">
+                                {['m', 'f', 'n'].map(g => (
+                                <button
+                                    key={g} type="button"
+                                    onClick={() => setInputs({...inputs, genus: g})}
+                                    className={`flex-1 py-3 text-sm font-bold uppercase transition-colors border-r last:border-r-0 border-slate-300 ${inputs.genus === g ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-200'}`}
+                                >
+                                    {g}
+                                </button>
+                                ))}
+                            </div>
+                            ) : (
+                            <DiffResult input={inputs.genus.toUpperCase()} target={card.genus.toUpperCase()} isCorrect={isGenusCorrect} />
+                            )}
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-600 mb-1">Deklination</label>
+                            {!isFlipped ? (
+                            <div className="flex rounded-lg overflow-hidden border border-slate-300">
+                                {['A', 'O', 'K', 'U', 'E'].map(d => (
+                                <button
+                                    key={d} type="button"
+                                    onClick={() => setInputs({...inputs, deklination: d})}
+                                    className={`flex-1 py-3 text-sm font-bold uppercase transition-colors border-r last:border-r-0 border-slate-300 ${inputs.deklination === d ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-200'}`}
+                                >
+                                    {d}
+                                </button>
+                                ))}
+                            </div>
+                            ) : (
+                            <DiffResult input={inputs.deklination} target={card.deklination} isCorrect={isDeklinationCorrect} />
+                            )}
+                        </div>
+                        </div>
+
+                        <div>
+                        <label className="block text-sm font-semibold text-slate-600 mb-1">Deutsche Bedeutung</label>
+                        {!isFlipped ? (
+                            <input 
+                            type="text" 
+                            value={inputs.bedeutung} 
+                            onChange={e => setInputs({...inputs, bedeutung: e.target.value})}
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                            placeholder="Übersetzung eingeben (oder leer lassen)"
+                            />
+                        ) : (
+                            <DiffResult input={inputs.bedeutung} target={card.bedeutung} isCorrect={isBedeutungCorrect} allowFuzzy />
+                        )}
+                        </div>
+                    </div>
+
+                    {!isFlipped ? (
+                        <button type="submit" className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition-colors flex justify-center items-center space-x-2">
+                        <span>Prüfen</span>
+                        <ChevronRight className="w-5 h-5" />
+                        </button>
+                    ) : (
+                        <div className="pt-4 border-t border-slate-100">
+                        <h3 className="text-center text-sm font-bold text-slate-500 mb-4 uppercase tracking-wider">Wie schwer war es?</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+                            <RateButton label="Nochmal" sub="< 1 Min" color="rose" onClick={() => handleRating(0)} />
+                            <RateButton label="Schwer" sub="Kleines Intervall" color="orange" onClick={() => handleRating(1)} />
+                            <RateButton label="Gut" sub="Normales Intervall" color="indigo" onClick={() => handleRating(2)} />
+                            <RateButton label="Einfach" sub="Großes Intervall" color="emerald" onClick={() => handleRating(3)} />
+                        </div>
+                        </div>
+                    )}
+                    </form>
+                </div>
+                </div>
+            );
+        }
+
+        function CardManager({ cards, setCards }) {
+            const [searchTerm, setSearchTerm] = useState('');
+            const [isAdding, setIsAdding] = useState(false);
+            const [showImportArea, setShowImportArea] = useState(false);
+            const [importText, setImportText] = useState('');
+            const [newCard, setNewCard] = useState({ nominativ: '', genitiv: '', genus: 'f', deklination: '', bedeutung: '', tags: '' });
+
+            const filteredCards = cards.filter(c => 
+                c.nominativ.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                c.bedeutung.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (c.tags && c.tags.toLowerCase().includes(searchTerm.toLowerCase()))
+            );
+
+            const handleAddCard = (e) => {
+                e.preventDefault();
+                const dekl = newCard.deklination || autoDetectDeklination(newCard.nominativ, newCard.genitiv);
+                const card = {
+                    id: generateId(), ...newCard, deklination: dekl, tags: newCard.tags.trim(),
+                    nextReview: Date.now(), interval: 0, easeFactor: 2.5, repetitions: 0
+                };
+                setCards([...cards, card]);
+                setNewCard({ nominativ: '', genitiv: '', genus: 'f', deklination: '', bedeutung: '', tags: '' });
+                setIsAdding(false);
+            };
+
+            const handleDelete = (id) => {
+                if(window.confirm('Vokabel wirklich löschen?')) {
+                    setCards(cards.filter(c => c.id !== id));
+                }
+            };
+
+            const processTextImport = () => {
+                if (!importText.trim()) return;
+                const lines = importText.split('\n');
+                const importedCards = [];
+
+                lines.forEach((line, index) => {
+                    if(!line.trim()) return;
+                    const separator = line.includes(';') ? ';' : ',';
+                    const cols = line.split(separator).map(s => s.trim());
+                    
+                    if (index === 0 && cols[0].toLowerCase() === 'nominativ') return;
+
+                    let nom, gen, gen_usRaw, deklRaw, bed, tagsRaw = '';
+
+                    if (cols.length >= 5) {
+                        [nom, gen, gen_usRaw, deklRaw, bed, tagsRaw] = cols;
+                    } else if (cols.length === 4) {
+                        [nom, gen, gen_usRaw, bed] = cols;
+                        deklRaw = ''; 
+                    } else return;
+
+                    const gen_us = gen_usRaw.toLowerCase().replace(/[^mfn]/g, ''); 
+                    
+                    if(nom && gen && bed) {
+                        importedCards.push({
+                            id: generateId(), nominativ: nom, genitiv: gen, genus: gen_us || 'n',
+                            deklination: deklRaw || autoDetectDeklination(nom, gen),
+                            bedeutung: bed, tags: tagsRaw || '',
+                            nextReview: Date.now(), interval: 0, easeFactor: 2.5, repetitions: 0
+                        });
+                    }
+                });
+
+                if (importedCards.length > 0) {
+                    setCards(prev => [...prev, ...importedCards]);
+                    alert(`${importedCards.length} Vokabeln erfolgreich importiert!`);
+                    setImportText('');
+                    setShowImportArea(false);
+                } else {
+                    alert('Keine gültigen Zeilen gefunden. Bitte das Format überprüfen.');
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div className="relative flex-1">
+                    <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                    <input 
+                        type="text" 
+                        placeholder="Vokabeln oder Tags suchen..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                    <button 
+                        onClick={() => { setIsAdding(!isAdding); setShowImportArea(false); }} 
+                        className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${isAdding ? 'bg-slate-200 text-slate-800' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                    >
+                        <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Neu</span>
+                    </button>
+                    
+                    <button 
+                        onClick={() => { setShowImportArea(!showImportArea); setIsAdding(false); }} 
+                        className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${showImportArea ? 'bg-slate-200 text-slate-800' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
+                    >
+                        <FileText className="w-4 h-4" /> <span>Text Import</span>
+                    </button>
+                    </div>
+                </div>
+
+                {showImportArea && (
+                    <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-inner">
+                    <div className="mb-4">
+                        <h3 className="font-bold text-slate-800 mb-1">Vokabeln per Text einfügen</h3>
+                        <p className="text-sm text-slate-500">
+                        Kopiere deine Liste im Format: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">nominativ,genitiv,genus,deklination,bedeutung,tags</code>
+                        </p>
+                    </div>
+                    
+                    <textarea
+                        className="w-full h-48 p-4 text-sm font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none resize-y"
+                        placeholder="Fibra,fibrae,f,A,die Faser,Anatomie&#10;Musculus,musculi,m,O,der Muskel,Anatomie&#10;Cranium,cranii,n,O,der Schädel,Anatomie"
+                        value={importText}
+                        onChange={(e) => setImportText(e.target.value)}
+                    />
+                    
+                    <div className="flex justify-end space-x-3 mt-4">
+                        <button 
+                        onClick={() => setShowImportArea(false)} 
+                        className="px-5 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium transition-colors"
+                        >
+                        Abbrechen
+                        </button>
+                        <button 
+                        onClick={processTextImport} 
+                        className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition-colors"
+                        >
+                        Importieren
+                        </button>
+                    </div>
+                    </div>
+                )}
+
+                {isAdding && (
+                    <form onSubmit={handleAddCard} className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 grid grid-cols-1 md:grid-cols-6 gap-4 shadow-inner">
+                    <div>
+                        <label className="text-xs font-bold text-indigo-900 uppercase">Nominativ</label>
+                        <input required value={newCard.nominativ} onChange={e=>setNewCard({...newCard, nominativ: e.target.value})} className="w-full mt-1 px-3 py-2 rounded-md border border-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Fibra" />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-indigo-900 uppercase">Genitiv</label>
+                        <input required value={newCard.genitiv} onChange={e=>setNewCard({...newCard, genitiv: e.target.value})} className="w-full mt-1 px-3 py-2 rounded-md border border-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="fibrae" />
+                    </div>
+                    
+                    <div>
+                        <label className="text-xs font-bold text-indigo-900 uppercase">Genus</label>
+                        <div className="flex mt-1 rounded-md overflow-hidden border border-indigo-200">
+                        {['m', 'f', 'n'].map(g => (
+                            <button key={g} type="button" onClick={() => setNewCard({...newCard, genus: g})} className={`flex-1 py-2 text-xs font-bold border-r last:border-r-0 border-indigo-200 transition-colors uppercase ${newCard.genus === g ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 hover:bg-indigo-50'}`}>{g}</button>
+                        ))}
+                        </div>
+                    </div>
+
+                    <div className="md:col-span-1">
+                        <label className="text-xs font-bold text-indigo-900 uppercase">Deklination</label>
+                        <div className="flex mt-1 rounded-md overflow-hidden border border-indigo-200">
+                        <button type="button" onClick={() => setNewCard({...newCard, deklination: ''})} title="Auto-Detect" className={`flex-1 py-2 text-[10px] sm:text-xs font-bold border-r border-indigo-200 transition-colors ${newCard.deklination === '' ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 hover:bg-indigo-50'}`}>Auto</button>
+                        {['A', 'O', 'K', 'U', 'E'].map(d => (
+                            <button key={d} type="button" onClick={() => setNewCard({...newCard, deklination: d})} className={`flex-1 py-2 text-xs font-bold border-r last:border-r-0 border-indigo-200 transition-colors ${newCard.deklination === d ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 hover:bg-indigo-50'}`}>{d}</button>
+                        ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold text-indigo-900 uppercase">Bedeutung</label>
+                        <input required value={newCard.bedeutung} onChange={e=>setNewCard({...newCard, bedeutung: e.target.value})} className="w-full mt-1 px-3 py-2 rounded-md border border-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="die Faser" />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-indigo-900 uppercase">Tags</label>
+                        <input value={newCard.tags} onChange={e=>setNewCard({...newCard, tags: e.target.value})} className="w-full mt-1 px-3 py-2 rounded-md border border-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Anatomie" />
+                    </div>
+                    <div className="md:col-span-6 flex justify-end">
+                        <button type="submit" className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-bold transition-colors">Hinzufügen</button>
+                    </div>
+                    </form>
+                )}
+
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-600">
+                        <thead className="bg-slate-50 text-slate-500 uppercase font-semibold border-b border-slate-200">
+                        <tr>
+                            <th className="px-4 py-3">Nominativ</th>
+                            <th className="px-4 py-3">Genitiv</th>
+                            <th className="px-4 py-3">Info</th>
+                            <th className="px-4 py-3">Bedeutung</th>
+                            <th className="px-4 py-3">Tags</th>
+                            <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3 text-right">Aktion</th>
+                        </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                        {filteredCards.length === 0 ? (
+                            <tr>
+                            <td colSpan="7" className="px-4 py-12 text-center">
+                                <FileText className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                                <p className="text-slate-500 font-medium">Noch keine Karten vorhanden.</p>
+                                <button onClick={() => setShowImportArea(true)} className="mt-2 text-indigo-600 hover:text-indigo-700 font-bold text-sm">Nutze den Text Import!</button>
+                            </td>
+                            </tr>
+                        ) : (
+                            filteredCards.map(card => (
+                            <tr key={card.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-4 py-3 font-serif font-bold text-slate-900">{card.nominativ}</td>
+                                <td className="px-4 py-3">{card.genitiv}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded text-xs font-bold bg-slate-100 text-slate-800 mr-2 uppercase">{card.genus}</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">{card.deklination}-Dekl</span>
+                                </td>
+                                <td className="px-4 py-3 truncate max-w-[200px]">{card.bedeutung}</td>
+                                <td className="px-4 py-3">
+                                {card.tags && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-slate-200 text-slate-600 bg-white">
+                                    {card.tags}
+                                    </span>
+                                )}
+                                </td>
+                                <td className="px-4 py-3 text-xs whitespace-nowrap">
+                                {card.repetitions === 0 ? (
+                                    <span className="text-rose-500 font-medium">Neu / Lernen</span>
+                                ) : (
+                                    <span className="text-emerald-600 font-medium">Lvl {card.repetitions} (I: {card.interval}d)</span>
+                                )}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                <button onClick={() => handleDelete(card.id)} className="text-slate-400 hover:text-rose-500 transition-colors">
+                                    <Trash2 className="w-5 h-5 inline" />
+                                </button>
+                                </td>
+                            </tr>
+                            ))
+                        )}
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+                </div>
+            );
+        }
+
+        function App() {
+            const [cards, setCards] = useState([]);
+            const [currentView, setCurrentView] = useState('dashboard');
+            const [isLoaded, setIsLoaded] = useState(false);
+
+            useEffect(() => {
+                const savedCards = localStorage.getItem('latin_srs_cards');
+                if (savedCards) {
+                    try { setCards(JSON.parse(savedCards)); } 
+                    catch (e) { console.error("Fehler", e); }
+                }
+                setIsLoaded(true);
+            }, []);
+
+            useEffect(() => {
+                if (isLoaded) {
+                    localStorage.setItem('latin_srs_cards', JSON.stringify(cards));
+                }
+            }, [cards, isLoaded]);
+
+            const dueCards = useMemo(() => {
+                const now = Date.now();
+                return cards.filter(card => card.nextReview <= now);
+            }, [cards]);
+
+            if (!isLoaded) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">Lade...</div>;
+
+            return (
+                <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-20 md:pb-0">
+                
+                <nav className="bg-slate-900 text-white shadow-md sticky top-0 z-50">
+                    <div className="max-w-4xl mx-auto px-4">
+                    <div className="flex justify-between items-center h-16">
+                        <div className="flex items-center space-x-2 font-serif text-xl font-bold tracking-wide">
+                        <BookOpen className="w-6 h-6 text-indigo-400" />
+                        <span>Vocabula <span className="text-indigo-400">Pro</span></span>
+                        </div>
+                        <div className="hidden md:flex space-x-1">
+                        <NavButton icon={<BarChart2 className="w-4 h-4" />} label="Dashboard" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
+                        <NavButton icon={<Play className="w-4 h-4" />} label="Lernen" active={currentView === 'study'} onClick={() => setCurrentView('study')} badge={dueCards.length} />
+                        <NavButton icon={<Database className="w-4 h-4" />} label="Manager" active={currentView === 'manager'} onClick={() => setCurrentView('manager')} />
+                        </div>
+                    </div>
+                    </div>
+                </nav>
+
+                <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-2 z-50">
+                    <MobileNavButton icon={<BarChart2 />} label="Home" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
+                    <MobileNavButton icon={<Play />} label="Lernen" active={currentView === 'study'} onClick={() => setCurrentView('study')} badge={dueCards.length} />
+                    <MobileNavButton icon={<Database />} label="Manager" active={currentView === 'manager'} onClick={() => setCurrentView('manager')} />
+                </div>
+
+                <main className="max-w-4xl mx-auto p-4 py-8">
+                    {currentView === 'dashboard' && <Dashboard cards={cards} dueCards={dueCards} onStartStudy={() => setCurrentView('study')} />}
+                    {currentView === 'study' && <StudySession dueCards={dueCards} setCards={setCards} onFinish={() => setCurrentView('dashboard')} />}
+                    {currentView === 'manager' && <CardManager cards={cards} setCards={setCards} />}
+                </main>
+
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
+
