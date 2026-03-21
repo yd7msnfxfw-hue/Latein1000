@@ -5,14 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Vocabula Pro - Latein SRS</title>
     
-    <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    
-    <!-- Babel für JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
@@ -20,8 +15,6 @@
         body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
         .font-serif { font-family: 'Lora', serif; }
         html, body { overscroll-behavior-y: contain; }
-        
-        /* Eigene Animationen */
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
     </style>
@@ -32,7 +25,6 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // --- EINGEBAUTE ICONS ---
         const iconPaths = {
             BookOpen: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
             Database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
@@ -43,14 +35,14 @@
             BarChart2: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
             Calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
             Upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
-            List: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>'
+            List: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+            Clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'
         };
 
         const Icon = ({ name, className = "w-5 h-5" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{ __html: iconPaths[name] || iconPaths.Check }} />
         );
 
-        // --- HILFSFUNKTIONEN ---
         const generateId = () => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
 
         const autoDetectDeklination = (nominativ, genitiv) => {
@@ -65,42 +57,55 @@
             return '';
         };
 
-        // SM-2 Algorithmus Logik (aus App 1, super stabil)
-        const calculateSM2 = (quality, card) => {
-            let { easeFactor, interval, repetitions } = card;
-            if (quality === 0) {
-                repetitions = 0;
-                interval = 0; 
-                easeFactor = Math.max(1.3, easeFactor - 0.2);
-            } else {
-                if (repetitions === 0) interval = 1;
-                else if (repetitions === 1) interval = 6;
-                else {
-                    let modifier = 1;
-                    if (quality === 1) modifier = 1.2;
-                    else if (quality === 2) modifier = easeFactor;
-                    else if (quality === 3) modifier = easeFactor * 1.3;
-                    interval = Math.round(interval * modifier);
-                }
-                repetitions += 1;
-                if (quality === 3) easeFactor += 0.15;
-                if (quality === 1) easeFactor = Math.max(1.3, easeFactor - 0.15);
-            }
-            const nextReview = Date.now() + (interval * 24 * 60 * 60 * 1000);
-            return { easeFactor, interval, repetitions, nextReview, status: 'learning' };
-        };
-
         const formatInterval = (days) => {
-            if (days === 0) return "< 10 Min";
             if (days === 1) return "1 Tag";
             if (days < 30) return `${Math.round(days)} Tage`;
             if (days < 365) return `${Math.round(days / 30)} Monate`;
             return `${Math.round(days / 365)} Jahre`;
         };
 
-        // --- KOMPONENTEN ---
-        
-        // 1. Dashboard
+        // Erweiterter SM-2 mit Intra-Session Timer
+        const calculateSM2 = (quality, card) => {
+            let { easeFactor, interval, repetitions } = card;
+            let showAfter = 0; 
+            let reQueue = false;
+            let displayInterval = "";
+
+            if (quality === 0) { // Nochmal -> 1 Minute
+                repetitions = 0;
+                interval = 0; 
+                easeFactor = Math.max(1.3, easeFactor - 0.2);
+                showAfter = Date.now() + 1 * 60000; 
+                reQueue = true;
+                displayInterval = "1 Min";
+            } else if (quality === 1 && interval === 0) { // Schwer (Neue Karte) -> 10 Minuten
+                showAfter = Date.now() + 10 * 60000; 
+                reQueue = true;
+                displayInterval = "10 Min";
+            } else {
+                // Tage-Bereich (Nächster Tag oder später)
+                if (repetitions === 0) {
+                    if (quality === 1) interval = 1;
+                    else if (quality === 2) interval = 1;
+                    else interval = 4;
+                } else if (repetitions === 1) interval = 6;
+                else {
+                    let modifier = 1;
+                    if (quality === 1) modifier = 1.2;
+                    else if (quality === 2) modifier = easeFactor;
+                    else if (quality === 3) modifier = easeFactor * 1.3;
+                    interval = Math.round(Math.max(1, interval) * modifier);
+                }
+                repetitions += 1;
+                if (quality === 3) easeFactor += 0.15;
+                if (quality === 1) easeFactor = Math.max(1.3, easeFactor - 0.15);
+                displayInterval = formatInterval(interval);
+            }
+
+            const nextReview = reQueue ? showAfter : Date.now() + (interval * 24 * 60 * 60 * 1000);
+            return { easeFactor, interval, repetitions, nextReview, status: 'learning', showAfter, reQueue, displayInterval };
+        };
+
         function Dashboard({ stats, newCardsLimit, setNewCardsLimit, onStartSession }) {
             const todayNames = ["Morgen", "Übermorgen", "In 3 Tagen", "In 4 Tagen", "In 5 Tagen", "In 6 Tagen", "In 7 Tagen"];
             const totalSessionCards = stats.dueCards.length + Math.min(newCardsLimit, stats.newCards.length);
@@ -111,7 +116,6 @@
                         <h1 className="text-3xl font-serif font-bold text-slate-900 mb-2">Salve, Studiosus!</h1>
                         <p className="text-slate-600">Dein täglicher Überblick über deinen Lernfortschritt.</p>
                     </header>
-
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
                             <span className="text-4xl font-black text-rose-500">{stats.dueCards.length}</span>
@@ -126,63 +130,38 @@
                             <span className="text-slate-500 font-medium mt-2 uppercase tracking-wider text-xs">Im Lernzyklus</span>
                         </div>
                     </div>
-
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                         <h2 className="text-xl font-bold mb-4 text-slate-800">Tagesziel festlegen</h2>
                         <div className="flex flex-col md:flex-row items-center gap-6">
                             <div className="flex-1 w-full">
                                 <label className="block text-sm font-medium text-slate-600 mb-2">Zusätzliche NEUE Karten heute lernen:</label>
-                                <input 
-                                    type="range" min="0" max="50" step="5"
-                                    value={newCardsLimit} 
-                                    onChange={(e) => setNewCardsLimit(parseInt(e.target.value))}
-                                    className="w-full accent-indigo-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                                />
+                                <input type="range" min="0" max="50" step="5" value={newCardsLimit} onChange={(e) => setNewCardsLimit(parseInt(e.target.value))} className="w-full accent-indigo-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
                                 <div className="flex justify-between text-xs text-slate-400 mt-2 font-bold">
                                     <span>0</span><span className="text-indigo-600 bg-indigo-50 px-2 py-1 rounded">{newCardsLimit} Karten</span><span>50</span>
                                 </div>
                             </div>
-                            <button 
-                                onClick={onStartSession}
-                                disabled={totalSessionCards === 0}
-                                className="w-full md:w-auto px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                            >
-                                <Icon name="Play" className="w-5 h-5"/>
-                                Lerneinheit starten ({totalSessionCards})
+                            <button onClick={onStartSession} disabled={totalSessionCards === 0} className="w-full md:w-auto px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                                <Icon name="Play" className="w-5 h-5"/> Lerneinheit starten ({totalSessionCards})
                             </button>
-                        </div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                        <h2 className="text-xl font-bold mb-4 text-slate-800 flex items-center gap-2">
-                            <Icon name="Calendar" className="text-indigo-500"/> Vorschau: Nächste 7 Tage
-                        </h2>
-                        <div className="flex flex-col gap-4">
-                            {stats.forecast.map((count, index) => (
-                                <div key={index} className="flex items-center gap-4">
-                                    <div className="w-28 text-sm font-medium text-slate-500 text-right">{todayNames[index]}</div>
-                                    <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden flex items-center">
-                                        <div 
-                                            className="bg-sky-400 h-full rounded-full transition-all duration-500" 
-                                            style={{ width: `${Math.min(100, (count / Math.max(20, ...stats.forecast)) * 100)}%` }}
-                                        ></div>
-                                    </div>
-                                    <div className="w-12 text-sm font-bold text-slate-700">{count}</div>
-                                </div>
-                            ))}
                         </div>
                     </div>
                 </div>
             );
         }
 
-        // 2. Study Session (Lernmodus) - Mit gefixtem Queue-State!
-        function StudySession({ sessionQueue, setSessionQueue, setDeck, onFinish }) {
-            const [currentIndex, setCurrentIndex] = useState(0);
+        function StudySession({ sessionQueue: initialQueue, setDeck, onFinish }) {
+            const [queue, setQueue] = useState(initialQueue.map(c => ({...c, showAfter: 0})));
             const [showAnswer, setShowAnswer] = useState(false);
             const [inputs, setInputs] = useState({ genitiv: '', genus: '', deklination: '', bedeutung: '' });
+            const [now, setNow] = useState(Date.now());
 
-            if (currentIndex >= sessionQueue.length) {
+            // Live-Timer aktualisiert die Zeit jede Sekunde
+            useEffect(() => {
+                const timer = setInterval(() => setNow(Date.now()), 1000);
+                return () => clearInterval(timer);
+            }, []);
+
+            if (queue.length === 0) {
                 return (
                     <div className="flex flex-col items-center justify-center py-20 text-center space-y-6 animate-fade-in">
                         <div className="w-20 h-20 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center">
@@ -195,9 +174,43 @@
                 );
             }
 
-            const card = sessionQueue[currentIndex];
-            
-            // Vorschau-Berechnung für die Buttons
+            // Suche die erste Karte, deren Sperr-Zeitraum (showAfter) abgelaufen ist
+            const readyIndex = queue.findIndex(c => !c.showAfter || c.showAfter <= now);
+
+            if (readyIndex === -1) {
+                // Keine Karte bereit -> Zeige Wartebildschirm mit Countdowns
+                const sortedQueue = [...queue].sort((a, b) => a.showAfter - b.showAfter);
+                return (
+                    <div className="max-w-md mx-auto py-10 text-center space-y-6 animate-fade-in">
+                        <div className="w-16 h-16 bg-indigo-100 text-indigo-500 rounded-full flex items-center justify-center mx-auto">
+                            <Icon name="Clock" className="w-8 h-8" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-slate-800">Karten laden auf...</h2>
+                        <p className="text-slate-500 text-sm">Diese Vokabeln hast du vor kurzem gelernt. Dein Gehirn braucht eine kurze Pause, bevor sie zur Festigung wieder abgefragt werden.</p>
+                        
+                        <div className="space-y-3 mt-6">
+                            {sortedQueue.map(c => {
+                                const waitTime = Math.max(0, Math.ceil((c.showAfter - now) / 1000));
+                                const m = Math.floor(waitTime / 60);
+                                const s = waitTime % 60;
+                                return (
+                                    <div key={c.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
+                                        <span className="font-serif font-bold text-slate-700">{c.nominativ}</span>
+                                        <span className="text-indigo-600 font-mono font-bold bg-indigo-50 px-2 py-1 rounded">
+                                            {m}:{s < 10 ? '0':''}{s}
+                                        </span>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                        <button onClick={() => setQueue(queue.map(c => ({...c, showAfter: 0})))} className="mt-8 text-sm text-slate-400 hover:text-indigo-500 font-medium">
+                            Timer überspringen (Sofort abfragen)
+                        </button>
+                    </div>
+                );
+            }
+
+            const card = queue[readyIndex];
             const simAgain = calculateSM2(0, card);
             const simHard = calculateSM2(1, card);
             const simGood = calculateSM2(2, card);
@@ -206,20 +219,22 @@
             const handleCheck = (e) => { e.preventDefault(); setShowAnswer(true); };
 
             const handleRate = (quality) => {
-                const updatedStats = calculateSM2(quality, card);
+                const result = calculateSM2(quality, card);
                 
-                // Deck updaten
-                setDeck(prevDeck => prevDeck.map(c => c.id === card.id ? { ...c, ...updatedStats } : c));
+                // Deck in der Datenbank aktualisieren
+                setDeck(prevDeck => prevDeck.map(c => c.id === card.id ? { ...c, ...result } : c));
                 
-                // WICHTIGER FIX: Bei Fehlern die Karte hinten anstellen (Sauberer React State Update)
-                if (quality === 0) {
-                    setSessionQueue(prevQueue => [...prevQueue, { ...card, ...updatedStats }]);
+                // Warteschlange aktualisieren
+                const newQueue = [...queue];
+                newQueue.splice(readyIndex, 1); 
+                
+                if (result.reQueue) {
+                    newQueue.push({ ...card, ...result }); // Wenn < 1 Tag, wieder hinten anstellen mit Timer
                 }
                 
-                // Zurücksetzen für nächste Karte
+                setQueue(newQueue);
                 setInputs({ genitiv: '', genus: '', deklination: '', bedeutung: '' });
                 setShowAnswer(false);
-                setCurrentIndex(prev => prev + 1);
             };
 
             const checkMatch = (input, target) => input?.trim().toLowerCase() === target?.trim().toLowerCase();
@@ -227,8 +242,8 @@
             return (
                 <div className="max-w-2xl mx-auto w-full flex-1 flex flex-col animate-fade-in">
                     <header className="flex justify-between items-center mb-6 w-full">
-                        <div className="text-slate-500 text-sm font-bold bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm">
-                            Karte {currentIndex + 1} von {sessionQueue.length}
+                        <div className="text-slate-500 text-sm font-bold bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm flex items-center gap-2">
+                            <span>Karte {initialQueue.length - queue.length + 1} von {initialQueue.length}</span>
                         </div>
                         <button onClick={onFinish} className="text-slate-400 hover:text-slate-600 font-medium flex items-center gap-1 transition-colors">
                             <Icon name="X" className="w-4 h-4"/> Abbrechen
@@ -242,31 +257,22 @@
                     </div>
 
                     <form onSubmit={handleCheck} className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 mb-6 space-y-5">
-                        {/* Genitiv */}
                         <div>
                             <label className="block text-sm font-bold text-slate-600 mb-2">Genitiv</label>
                             <div className="relative">
-                                <input 
-                                    autoFocus type="text" value={inputs.genitiv} onChange={(e) => setInputs({...inputs, genitiv: e.target.value})} disabled={showAnswer}
-                                    className={`w-full bg-slate-50 border ${showAnswer ? (checkMatch(inputs.genitiv, card.genitiv) ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-rose-500 bg-rose-50 text-rose-700') : 'border-slate-300 focus:border-indigo-500'} rounded-xl p-3 outline-none transition-colors`}
-                                    placeholder="z.B. fibrae"
-                                />
-                                {showAnswer && !checkMatch(inputs.genitiv, card.genitiv) && (
-                                    <div className="absolute right-3 top-3 text-emerald-600 font-bold text-sm bg-emerald-50 px-2 py-1 rounded">Lösung: {card.genitiv}</div>
-                                )}
+                                <input autoFocus type="text" value={inputs.genitiv} onChange={(e) => setInputs({...inputs, genitiv: e.target.value})} disabled={showAnswer} className={`w-full bg-slate-50 border ${showAnswer ? (checkMatch(inputs.genitiv, card.genitiv) ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-rose-500 bg-rose-50 text-rose-700') : 'border-slate-300 focus:border-indigo-500'} rounded-xl p-3 outline-none transition-colors`} placeholder="z.B. fibrae" />
+                                {showAnswer && !checkMatch(inputs.genitiv, card.genitiv) && <div className="absolute right-3 top-3 text-emerald-600 font-bold text-sm bg-emerald-50 px-2 py-1 rounded">Lösung: {card.genitiv}</div>}
                             </div>
                         </div>
 
-                        {/* Genus & Deklination */}
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-bold text-slate-600 mb-2">Genus</label>
                                 <div className="flex rounded-xl overflow-hidden border border-slate-300">
                                     {['m', 'f', 'n'].map(g => {
                                         let btnClass = "flex-1 py-3 font-bold uppercase transition-colors border-r last:border-r-0 border-slate-300 ";
-                                        if (!showAnswer) {
-                                            btnClass += inputs.genus === g ? "bg-indigo-600 text-white" : "bg-slate-50 text-slate-500 hover:bg-slate-200";
-                                        } else {
+                                        if (!showAnswer) btnClass += inputs.genus === g ? "bg-indigo-600 text-white" : "bg-slate-50 text-slate-500 hover:bg-slate-200";
+                                        else {
                                             if (g === card.genus) btnClass += "bg-emerald-100 text-emerald-700";
                                             else if (inputs.genus === g) btnClass += "bg-rose-100 text-rose-700";
                                             else btnClass += "bg-slate-50 text-slate-400";
@@ -277,28 +283,18 @@
                             </div>
                             <div>
                                 <label className="block text-sm font-bold text-slate-600 mb-2">Deklination</label>
-                                <select 
-                                    disabled={showAnswer} value={inputs.deklination} onChange={(e) => setInputs({...inputs, deklination: e.target.value})}
-                                    className={`w-full bg-slate-50 border ${showAnswer ? (inputs.deklination === card.deklination ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-rose-500 bg-rose-50 text-rose-700') : 'border-slate-300 focus:border-indigo-500'} rounded-xl p-3 outline-none appearance-none font-bold`}
-                                >
+                                <select disabled={showAnswer} value={inputs.deklination} onChange={(e) => setInputs({...inputs, deklination: e.target.value})} className={`w-full bg-slate-50 border ${showAnswer ? (inputs.deklination === card.deklination ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-rose-500 bg-rose-50 text-rose-700') : 'border-slate-300 focus:border-indigo-500'} rounded-xl p-3 outline-none appearance-none font-bold`}>
                                     <option value="">Wählen...</option>
                                     {['A', 'O', 'K', 'U', 'E'].map(d => <option key={d} value={d}>{d}-Deklination</option>)}
                                 </select>
-                                {showAnswer && inputs.deklination !== card.deklination && (
-                                    <div className="mt-1 text-emerald-600 text-xs font-bold text-right">Lösung: {card.deklination}</div>
-                                )}
+                                {showAnswer && inputs.deklination !== card.deklination && <div className="mt-1 text-emerald-600 text-xs font-bold text-right">Lösung: {card.deklination}</div>}
                             </div>
                         </div>
 
-                        {/* Bedeutung */}
                         <div>
                             <label className="block text-sm font-bold text-slate-600 mb-2">Bedeutung</label>
                             <div className="relative">
-                                <input 
-                                    type="text" value={inputs.bedeutung} onChange={(e) => setInputs({...inputs, bedeutung: e.target.value})} disabled={showAnswer}
-                                    className={`w-full bg-slate-50 border ${showAnswer ? 'border-slate-300 text-slate-500' : 'border-slate-300 focus:border-indigo-500'} rounded-xl p-3 outline-none transition-colors`}
-                                    placeholder="Deutsche Übersetzung..."
-                                />
+                                <input type="text" value={inputs.bedeutung} onChange={(e) => setInputs({...inputs, bedeutung: e.target.value})} disabled={showAnswer} className={`w-full bg-slate-50 border ${showAnswer ? 'border-slate-300 text-slate-500' : 'border-slate-300 focus:border-indigo-500'} rounded-xl p-3 outline-none transition-colors`} placeholder="Deutsche Übersetzung..." />
                                 {showAnswer && (
                                     <div className="mt-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 flex items-start gap-3">
                                         <Icon name="Check" className="w-5 h-5 flex-shrink-0 mt-0.5"/>
@@ -311,28 +307,25 @@
                             </div>
                         </div>
 
-                        {/* Buttons (Prüfen vs. SM-2 Rating) */}
                         {!showAnswer ? (
-                            <button type="submit" className="w-full mt-4 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-lg rounded-xl shadow-md transition-all">
-                                Prüfen
-                            </button>
+                            <button type="submit" className="w-full mt-4 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-lg rounded-xl shadow-md transition-all">Prüfen</button>
                         ) : (
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 border-t border-slate-100">
                                 <button type="button" onClick={() => handleRate(0)} className="flex flex-col items-center p-3 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-all">
                                     <span className="text-rose-600 font-bold mb-1">Nochmal</span>
-                                    <span className="text-xs text-rose-400 font-medium">{formatInterval(simAgain.interval)}</span>
+                                    <span className="text-xs text-rose-400 font-medium">{simAgain.displayInterval}</span>
                                 </button>
                                 <button type="button" onClick={() => handleRate(1)} className="flex flex-col items-center p-3 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl transition-all">
                                     <span className="text-orange-600 font-bold mb-1">Schwer</span>
-                                    <span className="text-xs text-orange-400 font-medium">{formatInterval(simHard.interval)}</span>
+                                    <span className="text-xs text-orange-400 font-medium">{simHard.displayInterval}</span>
                                 </button>
                                 <button type="button" onClick={() => handleRate(2)} className="flex flex-col items-center p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all">
                                     <span className="text-indigo-600 font-bold mb-1">Gut</span>
-                                    <span className="text-xs text-indigo-400 font-medium">{formatInterval(simGood.interval)}</span>
+                                    <span className="text-xs text-indigo-400 font-medium">{simGood.displayInterval}</span>
                                 </button>
                                 <button type="button" onClick={() => handleRate(3)} className="flex flex-col items-center p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all">
                                     <span className="text-emerald-600 font-bold mb-1">Einfach</span>
-                                    <span className="text-xs text-emerald-400 font-medium">{formatInterval(simEasy.interval)}</span>
+                                    <span className="text-xs text-emerald-400 font-medium">{simEasy.displayInterval}</span>
                                 </button>
                             </div>
                         )}
@@ -341,7 +334,6 @@
             );
         }
 
-        // 3. Karten Verwalten (Aus App 2, da sehr gut)
         function CardManager({ deck, setDeck }) {
             const [importMode, setImportMode] = useState('text');
             const [importText, setImportText] = useState('');
@@ -426,11 +418,7 @@
                         {importMode === 'text' ? (
                             <div className="animate-fade-in">
                                 <p className="text-sm text-slate-500 mb-3">Format: <code className="bg-slate-100 px-2 py-1 rounded text-slate-700">nominativ, genitiv, genus, deklination(optional), bedeutung</code></p>
-                                <textarea
-                                    className="w-full h-32 p-4 text-sm font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-y mb-3"
-                                    placeholder="Fibra, fibrae, f, A, die Faser&#10;Musculus, musculi, m, , der Muskel"
-                                    value={importText} onChange={(e) => setImportText(e.target.value)}
-                                />
+                                <textarea className="w-full h-32 p-4 text-sm font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-y mb-3" placeholder="Fibra, fibrae, f, A, die Faser&#10;Musculus, musculi, m, , der Muskel" value={importText} onChange={(e) => setImportText(e.target.value)} />
                                 <button onClick={processTextImport} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 transition-colors">Importieren</button>
                             </div>
                         ) : (
@@ -457,7 +445,7 @@
                                         <th className="px-4 py-3">Genitiv</th>
                                         <th className="px-4 py-3">Bedeutung</th>
                                         <th className="px-4 py-3">Status</th>
-                                        <th className="px-4 py-3">Nächste</th>
+                                        <th className="px-4 py-3">Intervall</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -472,8 +460,8 @@
                                                     <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold">Lvl {card.repetitions}</span>
                                                 }
                                             </td>
-                                            <td className="px-4 py-3 text-xs text-slate-400">
-                                                {card.interval === 0 ? '-' : formatInterval(card.interval)}
+                                            <td className="px-4 py-3 text-xs text-slate-400 font-bold">
+                                                {card.interval === 0 ? '< 1 Tag' : formatInterval(card.interval)}
                                             </td>
                                         </tr>
                                     ))}
@@ -488,7 +476,6 @@
             );
         }
 
-        // --- HAUPT-APP ---
         function App() {
             const [deck, setDeck] = useState([]);
             const [view, setView] = useState('dashboard');
@@ -497,8 +484,8 @@
             const [isLoaded, setIsLoaded] = useState(false);
 
             useEffect(() => {
-                const savedDeck = localStorage.getItem('anki_latin_deck_v3');
-                const savedLimit = localStorage.getItem('anki_new_limit_v3');
+                const savedDeck = localStorage.getItem('anki_latin_deck_v4');
+                const savedLimit = localStorage.getItem('anki_new_limit_v4');
                 if (savedDeck) setDeck(JSON.parse(savedDeck));
                 if (savedLimit) setNewCardsLimit(parseInt(savedLimit, 10));
                 setIsLoaded(true);
@@ -506,12 +493,11 @@
 
             useEffect(() => {
                 if (isLoaded) {
-                    localStorage.setItem('anki_latin_deck_v3', JSON.stringify(deck));
-                    localStorage.setItem('anki_new_limit_v3', newCardsLimit.toString());
+                    localStorage.setItem('anki_latin_deck_v4', JSON.stringify(deck));
+                    localStorage.setItem('anki_new_limit_v4', newCardsLimit.toString());
                 }
             }, [deck, newCardsLimit, isLoaded]);
 
-            // Stats berechnen (Fällige, Neue, Vorschau)
             const stats = useMemo(() => {
                 const now = Date.now();
                 const dueCards = deck.filter(c => c.status === 'learning' && c.nextReview <= now);
@@ -532,16 +518,12 @@
                 return { dueCards, newCards, learningCards, forecast };
             }, [deck]);
 
-            // Session starten und Queue aufbauen
             const startSession = () => {
                 const sessionCards = [...stats.dueCards, ...stats.newCards.slice(0, newCardsLimit)];
-                
-                // Mischen (Fisher-Yates)
                 for (let i = sessionCards.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
                     [sessionCards[i], sessionCards[j]] = [sessionCards[j], sessionCards[i]];
                 }
-                
                 setSessionQueue(sessionCards);
                 setView('study');
             };
@@ -571,11 +553,10 @@
 
                     <main className="max-w-4xl mx-auto p-4 py-8">
                         {view === 'dashboard' && <Dashboard stats={stats} newCardsLimit={newCardsLimit} setNewCardsLimit={setNewCardsLimit} onStartSession={startSession} />}
-                        {view === 'study' && <StudySession sessionQueue={sessionQueue} setSessionQueue={setSessionQueue} setDeck={setDeck} onFinish={() => setView('dashboard')} />}
+                        {view === 'study' && <StudySession sessionQueue={sessionQueue} setDeck={setDeck} onFinish={() => setView('dashboard')} />}
                         {view === 'manage' && <CardManager deck={deck} setDeck={setDeck} />}
                     </main>
 
-                    {/* Mobile Bottom Navigation */}
                     <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-2 z-50 shadow-[0_-5px_15px_-10px_rgba(0,0,0,0.1)]">
                         <button onClick={() => setView('dashboard')} className={`flex flex-col items-center p-2 w-full ${view === 'dashboard' ? 'text-indigo-600' : 'text-slate-400'}`}>
                             <Icon name="BarChart2" className="w-6 h-6" /><span className="text-[10px] font-bold mt-1">Home</span>
