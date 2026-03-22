@@ -45,15 +45,21 @@
 
         const generateId = () => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
 
-        const autoDetectDeklination = (nominativ, genitiv) => {
-            if (!nominativ || !genitiv) return '';
-            const nom = nominativ.trim().toLowerCase();
-            const gen = genitiv.trim().toLowerCase();
+        // Verzeihender Abgleich für die 4 Formen (ignoriert Kommas und überflüssige Leerzeichen)
+        const normalizeForms = (str) => str ? str.toLowerCase().replace(/[,;\s]+/g, ' ').trim() : '';
+        const checkMatchForms = (input, target) => normalizeForms(input) === normalizeForms(target);
+
+        const autoDetectDeklination = (stamm, formen) => {
+            if (!formen) return '';
+            // Nimm das zweite Wort (Genitiv Sg) zur Erkennung
+            const parts = formen.split(/[,;\s]+/).filter(Boolean);
+            if (parts.length < 2) return '';
+            const gen = parts[1].toLowerCase();
             if (gen.endsWith('ae')) return 'A';
             if (gen.endsWith('i')) return 'O';
             if (gen.endsWith('is')) return 'K';
             if (gen.endsWith('ei')) return 'E';
-            if (gen.endsWith('us') && nom.endsWith('us')) return 'U';
+            if (gen.endsWith('us')) return 'U';
             return '';
         };
 
@@ -173,7 +179,8 @@
         function StudySession({ sessionQueue: initialQueue, setDeck, onFinish }) {
             const [queue, setQueue] = useState(initialQueue.map(c => ({...c, showAfter: 0})));
             const [showAnswer, setShowAnswer] = useState(false);
-            const [inputs, setInputs] = useState({ genitiv: '', genus: '', deklination: '', bedeutung: '' });
+            // Inputs angepasst: genitiv wird zu formen
+            const [inputs, setInputs] = useState({ formen: '', genus: '', deklination: '', bedeutung: '' });
             const [now, setNow] = useState(Date.now());
 
             useEffect(() => {
@@ -213,7 +220,7 @@
                                 const s = waitTime % 60;
                                 return (
                                     <div key={c.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
-                                        <span className="font-serif font-bold text-slate-700">{c.nominativ}</span>
+                                        <span className="font-serif font-bold text-slate-700">{c.stamm}-</span>
                                         <span className="text-indigo-600 font-mono font-bold bg-indigo-50 px-2 py-1 rounded">
                                             {m}:{s < 10 ? '0':''}{s}
                                         </span>
@@ -248,11 +255,11 @@
                 }
                 
                 setQueue(newQueue);
-                setInputs({ genitiv: '', genus: '', deklination: '', bedeutung: '' });
+                setInputs({ formen: '', genus: '', deklination: '', bedeutung: '' });
                 setShowAnswer(false);
             };
 
-            const checkMatch = (input, target) => input?.trim().toLowerCase() === target?.trim().toLowerCase();
+            const isFormenCorrect = checkMatchForms(inputs.formen, card.formen);
 
             return (
                 <div className="max-w-2xl mx-auto w-full flex-1 flex flex-col animate-fade-in">
@@ -267,16 +274,17 @@
 
                     <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 mb-6 text-center relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
-                        <h2 className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-3">Nominativ</h2>
-                        <p className="text-5xl font-serif text-slate-900 font-bold">{card.nominativ}</p>
+                        <h2 className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-3">Wortstamm</h2>
+                        <p className="text-5xl font-serif text-slate-900 font-bold">{card.stamm}-</p>
                     </div>
 
                     <form onSubmit={handleCheck} className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 mb-6 space-y-5">
+                        {/* FORMEN EINGABE */}
                         <div>
-                            <label className="block text-sm font-bold text-slate-600 mb-2">Genitiv</label>
+                            <label className="block text-sm font-bold text-slate-600 mb-2">Formen (Nom Sg, Gen Sg, Nom Pl, Gen Pl)</label>
                             <div className="relative">
-                                <input autoFocus type="text" value={inputs.genitiv} onChange={(e) => setInputs({...inputs, genitiv: e.target.value})} disabled={showAnswer} className={`w-full bg-slate-50 border ${showAnswer ? (checkMatch(inputs.genitiv, card.genitiv) ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-rose-500 bg-rose-50 text-rose-700') : 'border-slate-300 focus:border-indigo-500'} rounded-xl p-3 outline-none transition-colors`} placeholder="z.B. fibrae" />
-                                {showAnswer && !checkMatch(inputs.genitiv, card.genitiv) && <div className="absolute right-3 top-3 text-emerald-600 font-bold text-sm bg-emerald-50 px-2 py-1 rounded">Lösung: {card.genitiv}</div>}
+                                <input autoFocus type="text" value={inputs.formen} onChange={(e) => setInputs({...inputs, formen: e.target.value})} disabled={showAnswer} className={`w-full bg-slate-50 border ${showAnswer ? (isFormenCorrect ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-rose-500 bg-rose-50 text-rose-700') : 'border-slate-300 focus:border-indigo-500'} rounded-xl p-3 outline-none transition-colors`} placeholder="z.B. luna, lunae, lunae, lunarum" />
+                                {showAnswer && !isFormenCorrect && <div className="mt-2 text-emerald-600 font-bold text-sm bg-emerald-50 px-3 py-2 rounded border border-emerald-100">Lösung: {card.formen}</div>}
                             </div>
                         </div>
 
@@ -361,24 +369,29 @@
                     const text = event.target.result;
                     const lines = text.split('\n').filter(l => l.trim() !== '');
                     if (lines.length < 2) return;
-                    const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+                    // Standard CSV Format Unterstützung
+                    const headers = lines[0].toLowerCase().split(/[;,]/).map(h => h.trim());
                     const parsedCards = [];
                     for (let i = 1; i < lines.length; i++) {
-                        const values = lines[i].split(',').map(v => v.trim());
+                        const values = lines[i].split(/[;,]/).map(v => v.trim());
                         const cardData = {};
                         headers.forEach((h, index) => { cardData[h] = values[index] || ''; });
-                        if (cardData.nominativ) {
+                        if (cardData.stamm && cardData.formen) {
                             parsedCards.push({
                                 id: generateId(),
-                                nominativ: cardData.nominativ, genitiv: cardData.genitiv || '', genus: cardData.genus || 'n',
-                                deklination: cardData.deklination || autoDetectDeklination(cardData.nominativ, cardData.genitiv),
+                                stamm: cardData.stamm, formen: cardData.formen, genus: cardData.genus || 'n',
+                                deklination: cardData.deklination || autoDetectDeklination(cardData.stamm, cardData.formen),
                                 bedeutung: cardData.bedeutung || '',
                                 status: 'new', interval: 0, easeFactor: 2.5, repetitions: 0, nextReview: 0,
                             });
                         }
                     }
-                    setDeck(prev => [...prev, ...parsedCards]);
-                    alert(`${parsedCards.length} Karten erfolgreich importiert!`);
+                    if(parsedCards.length > 0) {
+                        setDeck(prev => [...prev, ...parsedCards]);
+                        alert(`${parsedCards.length} Karten erfolgreich importiert!`);
+                    } else {
+                        alert("Fehler: Spalten 'stamm' und 'formen' nicht gefunden.");
+                    }
                 };
                 reader.readAsText(file);
             };
@@ -390,21 +403,21 @@
 
                 lines.forEach((line, index) => {
                     if(!line.trim()) return;
-                    const separator = line.includes(';') ? ';' : ',';
-                    const cols = line.split(separator).map(s => s.trim());
-                    if (index === 0 && cols[0].toLowerCase() === 'nominativ') return;
+                    // Da die Formen Kommas enthalten können, ist Semikolon das sicherste Trennzeichen
+                    const cols = line.split(';').map(s => s.trim());
+                    if (index === 0 && cols[0].toLowerCase() === 'stamm') return;
 
-                    let nom, gen, genusRaw, deklRaw, bed = '';
-                    if (cols.length >= 5) [nom, gen, genusRaw, deklRaw, bed] = cols;
-                    else if (cols.length === 4) { [nom, gen, genusRaw, bed] = cols; deklRaw = ''; } 
+                    let stamm, formen, genusRaw, deklRaw, bed = '';
+                    if (cols.length >= 5) [stamm, formen, genusRaw, deklRaw, bed] = cols;
+                    else if (cols.length === 4) { [stamm, formen, genusRaw, bed] = cols; deklRaw = ''; } 
                     else return;
 
                     const genus = genusRaw.toLowerCase().replace(/[^mfn]/g, '') || 'n'; 
                     
-                    if(nom && gen && bed) {
+                    if(stamm && formen && bed) {
                         importedCards.push({
-                            id: generateId(), nominativ: nom, genitiv: gen, genus: genus,
-                            deklination: deklRaw || autoDetectDeklination(nom, gen),
+                            id: generateId(), stamm: stamm, formen: formen, genus: genus,
+                            deklination: deklRaw || autoDetectDeklination(stamm, formen),
                             bedeutung: bed, status: 'new', interval: 0, easeFactor: 2.5, repetitions: 0, nextReview: 0
                         });
                     }
@@ -415,7 +428,7 @@
                     alert(`${importedCards.length} Vokabeln erfolgreich importiert!`);
                     setImportText('');
                 } else {
-                    alert('Keine gültigen Zeilen gefunden. Format überprüfen.');
+                    alert('Keine gültigen Zeilen gefunden. Bitte Format prüfen (Semikolon als Trenner).');
                 }
             };
 
@@ -432,15 +445,15 @@
 
                         {importMode === 'text' ? (
                             <div className="animate-fade-in">
-                                <p className="text-sm text-slate-500 mb-3">Format: <code className="bg-slate-100 px-2 py-1 rounded text-slate-700">nominativ, genitiv, genus, deklination(optional), bedeutung</code></p>
-                                <textarea className="w-full h-32 p-4 text-sm font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-y mb-3" placeholder="Fibra, fibrae, f, A, die Faser&#10;Musculus, musculi, m, , der Muskel" value={importText} onChange={(e) => setImportText(e.target.value)} />
+                                <p className="text-sm text-slate-500 mb-3">Format (mit <b>Semikolon</b> getrennt!): <code className="bg-slate-100 px-2 py-1 rounded text-slate-700">stamm; formen; genus; deklination(optional); bedeutung</code></p>
+                                <textarea className="w-full h-32 p-4 text-sm font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-y mb-3" placeholder="lun; luna, lunae, lunae, lunarum; f; A; der Mond&#10;muscul; musculus, musculi, musculi, musculorum; m; O; der Muskel" value={importText} onChange={(e) => setImportText(e.target.value)} />
                                 <button onClick={processTextImport} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 transition-colors">Importieren</button>
                             </div>
                         ) : (
                             <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50 animate-fade-in">
                                 <Icon name="Upload" className="w-10 h-10 mx-auto text-slate-400 mb-3"/>
                                 <input type="file" accept=".csv" onChange={handleFileUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer mx-auto max-w-xs" />
-                                <p className="text-xs text-slate-400 mt-4">Spalten: nominativ, genitiv, genus, deklination, bedeutung</p>
+                                <p className="text-xs text-slate-400 mt-4">Spalten: stamm, formen, genus, deklination, bedeutung</p>
                             </div>
                         )}
                         
@@ -456,8 +469,8 @@
                             <table className="w-full text-left text-sm text-slate-600">
                                 <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs border-b border-slate-200">
                                     <tr>
-                                        <th className="px-4 py-3">Nominativ</th>
-                                        <th className="px-4 py-3">Genitiv</th>
+                                        <th className="px-4 py-3">Stamm</th>
+                                        <th className="px-4 py-3">Formen (Sg & Pl)</th>
                                         <th className="px-4 py-3">Bedeutung</th>
                                         <th className="px-4 py-3">Status</th>
                                         <th className="px-4 py-3">Intervall</th>
@@ -466,8 +479,8 @@
                                 <tbody className="divide-y divide-slate-100">
                                     {deck.map(card => (
                                         <tr key={card.id} className="hover:bg-slate-50">
-                                            <td className="px-4 py-3 font-serif font-bold text-slate-900">{card.nominativ}</td>
-                                            <td className="px-4 py-3">{card.genitiv} <span className="text-xs bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-bold uppercase ml-1">{card.genus}</span> <span className="text-xs text-slate-400 ml-1">{card.deklination}-Dekl</span></td>
+                                            <td className="px-4 py-3 font-serif font-bold text-slate-900">{card.stamm}-</td>
+                                            <td className="px-4 py-3">{card.formen} <span className="text-xs bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-bold uppercase ml-1">{card.genus}</span> <span className="text-xs text-slate-400 ml-1">{card.deklination}-Dekl</span></td>
                                             <td className="px-4 py-3 truncate max-w-[200px]">{card.bedeutung}</td>
                                             <td className="px-4 py-3">
                                                 {card.status === 'new' ? 
@@ -500,9 +513,10 @@
             const [isLoaded, setIsLoaded] = useState(false);
 
             useEffect(() => {
-                const savedDeck = localStorage.getItem('anki_latin_deck_v4');
-                const savedLimit = localStorage.getItem('anki_new_limit_v4');
-                const savedShuffle = localStorage.getItem('anki_shuffle_new');
+                // NEUE SPEICHER-ID: v5 (Wegen Umstellung von nominativ/genitiv auf stamm/formen)
+                const savedDeck = localStorage.getItem('anki_latin_deck_v5');
+                const savedLimit = localStorage.getItem('anki_new_limit_v5');
+                const savedShuffle = localStorage.getItem('anki_shuffle_new_v5');
                 if (savedDeck) setDeck(JSON.parse(savedDeck));
                 if (savedLimit) setNewCardsLimit(parseInt(savedLimit, 10));
                 if (savedShuffle !== null) setShuffleNewCards(savedShuffle === 'true');
@@ -511,9 +525,9 @@
 
             useEffect(() => {
                 if (isLoaded) {
-                    localStorage.setItem('anki_latin_deck_v4', JSON.stringify(deck));
-                    localStorage.setItem('anki_new_limit_v4', newCardsLimit.toString());
-                    localStorage.setItem('anki_shuffle_new', shuffleNewCards.toString());
+                    localStorage.setItem('anki_latin_deck_v5', JSON.stringify(deck));
+                    localStorage.setItem('anki_new_limit_v5', newCardsLimit.toString());
+                    localStorage.setItem('anki_shuffle_new_v5', shuffleNewCards.toString());
                 }
             }, [deck, newCardsLimit, shuffleNewCards, isLoaded]);
 
@@ -552,7 +566,6 @@
 
                 const sessionCards = [...stats.dueCards, ...selectedNew];
                 
-                // Mische die finale Session (Fällige + Neue)
                 for (let i = sessionCards.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
                     [sessionCards[i], sessionCards[j]] = [sessionCards[j], sessionCards[i]];
